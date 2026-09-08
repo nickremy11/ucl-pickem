@@ -70,6 +70,20 @@ export interface TeamRef {
   crestUrl: string | null;
 }
 
+export interface MatchState {
+  status: "scheduled" | "live" | "finished" | "postponed";
+  kickoffAt: string;
+  home: number | null;
+  away: number | null;
+  leg: number | null;
+}
+
+export interface RevealedPick {
+  userId: string;
+  name: string;
+  selection: Selection;
+}
+
 export interface Contest {
   id: string;
   kind: "fixture" | "tie";
@@ -88,6 +102,9 @@ export interface Contest {
     isCorrect: boolean | null;
     pointsAwarded: number | null;
   } | null;
+  match: MatchState | null;
+  /** Other members' picks. Empty until this contest locks. */
+  picks: RevealedPick[];
 }
 
 export interface RoundDetail {
@@ -102,6 +119,7 @@ export interface RoundDetail {
     pickMode: PickMode;
   };
   awaitingDraw: boolean;
+  memberCount: number;
   contests: Contest[];
 }
 

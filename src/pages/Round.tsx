@@ -3,6 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, type Contest, type RoundDetail, type Selection } from "../lib/api";
 import { Card, Spinner, Empty, Alert, Crest } from "../components/ui";
+import { MatchScore } from "../components/MatchScore";
+import { RevealedPicks } from "../components/RevealedPicks";
+import { useAuth } from "../lib/auth";
 import { kickoffLabel, dayLabel, countdown, isUrgent, signed } from "../lib/format";
 import { useNow } from "../lib/useNow";
 
@@ -11,9 +14,16 @@ export function Round() {
   const qc = useQueryClient();
   const key = ["round", slug, code];
 
+  const { user } = useAuth();
+
   const { data, isLoading, error } = useQuery({
     queryKey: key,
     queryFn: () => api.round(slug, code),
+    // Poll only while a match is actually in play. Outside those windows the
+    // data is static for days, and polling it would be pure waste.
+    refetchInterval: (q) =>
+      q.state.data?.contests.some((x) => x.match?.status === "live") ? 30_000 : false,
+    refetchOnWindowFocus: true,
   });
 
   const [failed, setFailed] = useState<string | null>(null);
@@ -144,6 +154,8 @@ export function Round() {
                 <ContestRow
                   key={contest.id}
                   contest={contest}
+                  memberCount={data.memberCount}
+                  meId={user?.id}
                   saving={save.isPending && save.variables?.contestId === contest.id}
                   onPick={(selection) => save.mutate({ contestId: contest.id, selection })}
                 />
@@ -183,10 +195,14 @@ function Header({ slug, data }: { slug: string; data: RoundDetail }) {
 
 function ContestRow({
   contest,
+  memberCount,
+  meId,
   saving,
   onPick,
 }: {
   contest: Contest;
+  memberCount: number;
+  meId?: string;
   saving: boolean;
   onPick: (s: Selection) => void;
 }) {
@@ -208,8 +224,11 @@ function ContestRow({
           : ""
       }`}
     >
-      <div className="flex items-center justify-between px-4 pt-3 text-[11px] text-chalk-500">
-        <span>{kickoffLabel(contest.locksAt)}</span>
+      <div className="flex items-center justify-between gap-2 px-4 pt-3 text-[11px] text-chalk-500">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{kickoffLabel(contest.locksAt)}</span>
+          {contest.match && <MatchScore match={contest.match} />}
+        </span>
         {locked ? (
           graded ? (
             <span
@@ -275,6 +294,8 @@ function ContestRow({
           Waiting on Monday&rsquo;s line before picks open.
         </p>
       )}
+
+      <RevealedPicks contest={contest} memberCount={memberCount} meId={meId} />
     </Card>
   );
 }

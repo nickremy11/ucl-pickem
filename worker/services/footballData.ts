@@ -8,6 +8,12 @@
 
 const BASE = "https://api.football-data.org/v4";
 const CACHE_TTL_SEC = 60;
+/**
+ * Live polling cache. Short enough that a watching viewer sees a goal within
+ * half a minute, long enough that a hundred viewers still cost one upstream
+ * request — comfortably inside the free tier's 10 req/min.
+ */
+const LIVE_CACHE_TTL_SEC = 20;
 
 export interface FdTeam {
   id: number;
@@ -41,14 +47,14 @@ export interface FdMatch {
   };
 }
 
-async function get<T>(env: Env, path: string): Promise<T> {
+async function get<T>(env: Env, path: string, ttlSec = CACHE_TTL_SEC): Promise<T> {
   if (!env.FOOTBALL_DATA_TOKEN) {
     throw new Error(
       "FOOTBALL_DATA_TOKEN is not set. Add it to .dev.vars locally, or via `wrangler secret put`.",
     );
   }
 
-  const cacheKey = `fd:${path}`;
+  const cacheKey = `fd:${ttlSec}:${path}`;
   const cached = await env.SESSIONS.get(cacheKey);
   if (cached) return JSON.parse(cached) as T;
 
@@ -64,7 +70,7 @@ async function get<T>(env: Env, path: string): Promise<T> {
   }
 
   const body = (await res.json()) as T;
-  await env.SESSIONS.put(cacheKey, JSON.stringify(body), { expirationTtl: CACHE_TTL_SEC });
+  await env.SESSIONS.put(cacheKey, JSON.stringify(body), { expirationTtl: ttlSec });
   return body;
 }
 
@@ -82,6 +88,16 @@ export async function fetchMatches(env: Env): Promise<FdMatch[]> {
   const body = await get<{ matches: FdMatch[] }>(
     env,
     `/competitions/${env.COMPETITION_CODE}/matches`,
+  );
+  return body.matches ?? [];
+}
+
+/** Same payload, but cached briefly so live scores stay current. */
+export async function fetchMatchesLive(env: Env): Promise<FdMatch[]> {
+  const body = await get<{ matches: FdMatch[] }>(
+    env,
+    `/competitions/${env.COMPETITION_CODE}/matches`,
+    LIVE_CACHE_TTL_SEC,
   );
   return body.matches ?? [];
 }

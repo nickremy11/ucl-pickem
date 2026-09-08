@@ -6,12 +6,16 @@ import {
   contests,
   picks,
   teams,
+  fixtures,
+  users,
+  poolMembers,
   oddsSnapshots,
 } from "../db/schema";
 import { type AppEnv, requireAuth } from "../lib/app";
 import { requireMembership } from "../lib/pool";
 import { badRequest, forbidden, notFound, conflict } from "../lib/http";
 import { SELECTIONS, allowedSelections, ROUND_CODES } from "../../shared/domain";
+import { refreshLiveScores, roundHasLiveFixture } from "../services/ingest";
 
 export const pickRoutes = new Hono<AppEnv>();
 pickRoutes.use("*", requireAuth);
@@ -69,6 +73,20 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
   });
   if (!round) notFound("That round is not part of this competition.");
 
+  // Someone is watching this round: if anything in it is in play, pull fresh
+  // scores before answering. The upstream call is cached for 20s, so a crowd
+  // of viewers still costs one request, and it is skipped entirely when
+  // nothing is live.
+  if (await roundHasLiveFixture(db, round.id)) {
+    try {
+      await refreshLiveScores(db, c.env);
+    } catch (err) {
+      // A provider hiccup must not take down the picks page; stale scores are
+      // far better than an error.
+      console.error("live score refresh failed:", err);
+    }
+  }
+
   const contestRows = await db.query.contests.findMany({
     where: eq(contests.roundId, round.id),
     orderBy: contests.locksAt,
@@ -89,6 +107,18 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
   ];
   const teamRows = await db.query.teams.findMany({ where: inArray(teams.id, teamIds) });
   const teamById = new Map(teamRows.map((t) => [t.id, t]));
+
+  // Scores come from the underlying fixtures. A tie contest spans two legs, so
+  // show whichever leg is live, else the most recent one played.
+  const fixtureRows = await db.query.fixtures.findMany({
+    where: eq(fixtures.roundId, round.id),
+  });
+  const fixtureById = new Map(fixtureRows.map((f) => [f.id, f]));
+  const fixturesByTie = new Map<string, typeof fixtureRows>();
+  for (const f of fixtureRows) {
+    if (!f.tieId) continue;
+    fixturesByTie.set(f.tieId, [...(fixturesByTie.get(f.tieId) ?? []), f]);
+  }
 
   const contestIds = contestRows.map((x) => x.id);
   const myPicks = await db.query.picks.findMany({
@@ -114,13 +144,64 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
   }
 
   const now = Date.now();
+  const lockedIds = contestRows.filter((x) => x.locksAt.getTime() <= now).map((x) => x.id);
+
+  /*
+   * Other members' picks are revealed per contest, the moment that contest
+   * locks — never before. Filtering here rather than in the client is the
+   * whole point: an unlocked pick that reached the browser would be visible
+   * in the network tab regardless of what the UI chose to draw.
+   */
+  const revealed =
+    lockedIds.length > 0
+      ? await db.query.picks.findMany({
+          where: and(eq(picks.poolId, pool.id), inArray(picks.contestId, lockedIds)),
+        })
+      : [];
+
+  const memberRows = await db
+    .select({
+      userId: users.id,
+      username: users.username,
+      email: users.email,
+      displayName: poolMembers.displayName,
+    })
+    .from(poolMembers)
+    .innerJoin(users, eq(users.id, poolMembers.userId))
+    .where(eq(poolMembers.poolId, pool.id));
+
+  const nameById = new Map(
+    memberRows.map((m) => [m.userId, m.displayName ?? m.username ?? m.email.split("@")[0]]),
+  );
+
+  const picksByContest = new Map<string, { userId: string; name: string; selection: string }[]>();
+  for (const p of revealed) {
+    const entry = {
+      userId: p.userId,
+      name: nameById.get(p.userId) ?? "Unknown",
+      selection: p.selection,
+    };
+    picksByContest.set(p.contestId, [...(picksByContest.get(p.contestId) ?? []), entry]);
+  }
+
   return c.json({
     round: roundSummary(round, pool.pickMode),
     awaitingDraw: false,
+    memberCount: memberRows.length,
     contests: contestRows.map((x) => {
       const line = lines.get(x.id);
       const mine = pickByContest.get(x.id);
       const locked = x.locksAt.getTime() <= now;
+
+      // Pick the fixture whose score should be shown.
+      let fixture = x.fixtureId ? fixtureById.get(x.fixtureId) : undefined;
+      if (!fixture && x.tieId) {
+        const legs = (fixturesByTie.get(x.tieId) ?? []).slice().sort(
+          (a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime(),
+        );
+        fixture = legs.find((f) => f.status === "live") ?? legs.filter((f) => f.status === "finished").pop() ?? legs[0];
+      }
+
       return {
         id: x.id,
         kind: x.kind,
@@ -142,6 +223,19 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
               pointsAwarded: mine.pointsAwarded,
             }
           : null,
+        // The client derives the match minute from kickoff + status, so it
+        // ticks without refetching.
+        match: fixture
+          ? {
+              status: fixture.status,
+              kickoffAt: fixture.kickoffAt,
+              home: fixture.homeScore90,
+              away: fixture.awayScore90,
+              leg: fixture.leg,
+            }
+          : null,
+        // Empty until this contest locks.
+        picks: picksByContest.get(x.id) ?? [],
       };
     }),
   });

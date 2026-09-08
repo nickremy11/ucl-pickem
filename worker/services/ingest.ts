@@ -1,9 +1,10 @@
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, ne, inArray, sql } from "drizzle-orm";
 import type { Db } from "../db";
 import { teams, rounds, fixtures, ties, contests, pools, competitions } from "../db/schema";
 import {
   fetchCurrentSeason,
   fetchMatches,
+  fetchMatchesLive,
   mapStatus,
   score90,
   type FdMatch,
@@ -333,4 +334,75 @@ export async function refreshRoundTiming(db: Db, competitionId: string) {
   }
 
   return seasonFirstKickoff;
+}
+
+/**
+ * Refresh scores and statuses for matches currently in play.
+ *
+ * Distinct from `syncFromProvider`, which reconciles the whole competition and
+ * rewrites 144 rows. This runs on the read path whenever someone is watching a
+ * round with a live match, so it must be cheap: it writes only the fixtures
+ * whose score or status actually moved, and leans on a 20-second upstream
+ * cache so many viewers cost one request.
+ */
+export async function refreshLiveScores(db: Db, env: Env): Promise<number> {
+  const matches = await fetchMatchesLive(env);
+  if (matches.length === 0) return 0;
+
+  const byProviderId = new Map(matches.map((m) => [m.id, m]));
+
+  // Only consider fixtures we already know about that are not yet final.
+  const candidates = await db.query.fixtures.findMany({
+    where: ne(fixtures.status, "finished"),
+  });
+
+  let updated = 0;
+  for (const fixture of candidates) {
+    const match = byProviderId.get(fixture.providerFixtureId);
+    if (!match) continue;
+
+    const status = mapStatus(match);
+    const s90 = score90(match);
+    const next = {
+      status,
+      homeScore90: s90.home,
+      awayScore90: s90.away,
+      homeScoreFt: match.score.fullTime.home,
+      awayScoreFt: match.score.fullTime.away,
+      homePens: match.score.penalties?.home ?? null,
+      awayPens: match.score.penalties?.away ?? null,
+    };
+
+    const unchanged =
+      fixture.status === next.status &&
+      fixture.homeScore90 === next.homeScore90 &&
+      fixture.awayScore90 === next.awayScore90 &&
+      fixture.homeScoreFt === next.homeScoreFt &&
+      fixture.awayScoreFt === next.awayScoreFt;
+    if (unchanged) continue;
+
+    await db
+      .update(fixtures)
+      .set({ ...next, updatedAt: new Date() })
+      .where(eq(fixtures.id, fixture.id));
+    updated++;
+  }
+
+  return updated;
+}
+
+/** True when a round has a fixture the provider considers in play. */
+export async function roundHasLiveFixture(db: Db, roundId: string): Promise<boolean> {
+  const rows = await db.query.fixtures.findMany({ where: eq(fixtures.roundId, roundId) });
+  const now = Date.now();
+  return rows.some(
+    (f) =>
+      f.status === "live" ||
+      // Kicked off but not yet marked finished: still worth polling, since the
+      // provider can lag the whistle.
+      (f.status !== "finished" &&
+        f.status !== "postponed" &&
+        f.kickoffAt.getTime() <= now &&
+        now - f.kickoffAt.getTime() < 3.5 * 60 * 60 * 1000),
+  );
 }

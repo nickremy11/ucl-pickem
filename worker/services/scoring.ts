@@ -1,4 +1,4 @@
-import { eq, and, inArray, ne, isNull } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../db";
 import {
   contests,
@@ -9,12 +9,15 @@ import {
   pools,
   poolMembers,
   standingsRounds,
+  auditLog,
 } from "../db/schema";
 import { inChunks } from "../db/batch";
 import type { Selection } from "../../shared/domain";
 
 export interface ScoreReport {
   contestsSettled: number;
+  /** Already-settled contests whose result changed underneath us. */
+  outcomesCorrected: number;
   picksGraded: number;
   poolsRestated: number;
 }
@@ -25,7 +28,12 @@ export interface ScoreReport {
  * grading only touches picks whose `pointsAwarded` is still null.
  */
 export async function settleAndScore(db: Db, competitionId: string): Promise<ScoreReport> {
-  const report: ScoreReport = { contestsSettled: 0, picksGraded: 0, poolsRestated: 0 };
+  const report: ScoreReport = {
+    contestsSettled: 0,
+    outcomesCorrected: 0,
+    picksGraded: 0,
+    poolsRestated: 0,
+  };
 
   const roundRows = await db.query.rounds.findMany({
     where: eq(rounds.competitionId, competitionId),
@@ -33,19 +41,37 @@ export async function settleAndScore(db: Db, competitionId: string): Promise<Sco
   if (roundRows.length === 0) return report;
   const roundById = new Map(roundRows.map((r) => [r.id, r]));
 
-  const open = await db.query.contests.findMany({
-    where: and(
-      inArray(
-        contests.roundId,
-        roundRows.map((r) => r.id),
-      ),
-      ne(contests.status, "settled"),
-    ),
+  const roundIds = roundRows.map((r) => r.id);
+  const allContests = await db.query.contests.findMany({
+    where: inArray(contests.roundId, roundIds),
   });
 
-  for (const contest of open) {
+  /*
+   * Which contests need evaluating?
+   *
+   * The obvious answer — "the unsettled ones" — is wrong. Providers correct
+   * scores after full time (a disputed goal, a data fix), and our own polling
+   * can briefly see a wrong state. A contest that settled on a score which has
+   * since changed would keep its original outcome forever, silently paying out
+   * the wrong points with nothing to signal it. So a settled contest is
+   * re-evaluated whenever its underlying fixture changed after it settled.
+   */
+  const pending: typeof allContests = [];
+  for (const contest of allContests) {
+    if (contest.status !== "settled") {
+      pending.push(contest);
+      continue;
+    }
+    const settledAt = contest.settledAt?.getTime() ?? 0;
+    const touched = await fixtureTouchedAfter(db, contest, settledAt);
+    if (touched) pending.push(contest);
+  }
+
+  for (const contest of pending) {
     const outcome = await resolveOutcome(db, contest);
     if (!outcome) continue;
+
+    const changed = contest.status === "settled" && contest.outcome !== outcome.selection;
 
     await db
       .update(contests)
@@ -63,7 +89,27 @@ export async function settleAndScore(db: Db, competitionId: string): Promise<Sco
         .where(eq(ties.id, contest.tieId));
     }
 
-    report.contestsSettled++;
+    if (changed) {
+      // The result moved after we had already paid it out. Clear the grades so
+      // the pass below re-scores every pick against the corrected outcome, and
+      // record it — a score silently changing under people is exactly the kind
+      // of thing a pool will argue about.
+      await db
+        .update(picks)
+        .set({ isCorrect: null, pointsAwarded: null })
+        .where(eq(picks.contestId, contest.id));
+
+      await db.insert(auditLog).values({
+        action: "contest.outcome.corrected",
+        target: contest.id,
+        before: { outcome: contest.outcome },
+        after: { outcome: outcome.selection },
+      });
+
+      report.outcomesCorrected++;
+    }
+
+    if (contest.status !== "settled") report.contestsSettled++;
   }
 
   // ---- grade picks -------------------------------------------------------
@@ -228,6 +274,20 @@ export function resolveTieOutcome(tie: TieLike, legFixtures: FixtureLike[]): Out
   if (aPens === bPens) return null;
 
   return win(aPens > bPens);
+}
+
+/** True when a contest's underlying fixture(s) changed after it was settled. */
+async function fixtureTouchedAfter(
+  db: Db,
+  contest: typeof contests.$inferSelect,
+  settledAtMs: number,
+): Promise<boolean> {
+  const rows = contest.fixtureId
+    ? await db.query.fixtures.findMany({ where: eq(fixtures.id, contest.fixtureId) })
+    : contest.tieId
+      ? await db.query.fixtures.findMany({ where: eq(fixtures.tieId, contest.tieId) })
+      : [];
+  return rows.some((f) => f.updatedAt.getTime() > settledAtMs);
 }
 
 /** Goal margin (side A minus side B) after 90, for handicap grading. */

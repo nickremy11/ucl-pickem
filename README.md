@@ -52,6 +52,22 @@ visits means everyone stays listed by their email address. Usernames are unique
 case-insensitively, and are shown instead of the email in standings, member
 lists and picks.
 
+**Live scores**
+
+While a match is in play the picks page shows the running score and an
+approximate match minute. The provider exposes no `minute` field, so it is
+derived from kickoff time and status in `shared/matchClock.ts` and always shown
+with a `~`. It is display only — nothing that decides points depends on it.
+Scores refresh on the read path when a round has a live fixture, behind a
+20-second upstream cache, so a crowd of viewers costs one request and nothing
+is fetched when nothing is playing.
+
+**Seeing other picks**
+
+Members' picks are revealed per contest the moment that contest locks, never
+before. The filtering happens server-side: an unlocked pick that reached the
+browser would be visible in the network tab whatever the UI drew.
+
 **Locking**
 
 - League contests lock at kickoff.
@@ -156,6 +172,11 @@ sync do not drift when the US changes clocks.
   KDF exceeds the Free plan's 10ms CPU budget. Magic links do not.
 - **`Date.now()` does not advance during CPU work** on Workers — the clock
   moves only on I/O. Timing pure computation with it always yields zero.
+- **A settled contest is re-evaluated if its fixture changes afterwards.**
+  Providers do correct scores after full time. Without this, a contest settled
+  on a score that later changed would keep paying out the original outcome
+  forever, with nothing to signal it. Corrections re-grade every affected pick
+  and are written to `audit_log`.
 - **Unique-constraint violations are not visible in `String(err)`.** Drizzle
   wraps the driver error, and its own message is only the failed SQL; the
   `UNIQUE constraint failed` text is further down the `cause` chain. Use
