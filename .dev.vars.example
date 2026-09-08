@@ -1,0 +1,20 @@
+# Copy to .dev.vars and fill in.
+
+# Print magic links to the terminal instead of emailing them. Keep this on
+# locally so development never sends mail to real addresses.
+MAIL_TRANSPORT=console
+
+# https://www.football-data.org/client/register  (free tier)
+FOOTBALL_DATA_TOKEN=
+
+# https://the-odds-api.com/  (free tier: 500 requests/month) - simple mode only
+ODDS_API_KEY=
+
+# https://dash.cloudflare.com -> Turnstile
+TURNSTILE_SECRET_KEY=
+
+# Shared secret for the /api/admin/* maintenance endpoints (sync, rescore).
+ADMIN_TOKEN=
+
+# Local dev origin, so magic links point at the dev server.
+APP_URL=http://localhost:5173

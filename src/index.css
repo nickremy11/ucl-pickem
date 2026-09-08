@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/*
+ * Dark-first palette. The app is used mostly on a phone, at night, during
+ * matches — so the default is the dark one and light is not offered.
+ */
+@theme {
+  --color-pitch-950: #070b18;
+  --color-pitch-900: #0c1226;
+  --color-pitch-850: #121a33;
+  --color-pitch-800: #182140;
+  --color-pitch-700: #223056;
+  --color-pitch-600: #33436e;
+
+  --color-chalk-50: #f2f5ff;
+  --color-chalk-200: #c6cfe8;
+  --color-chalk-400: #8e9bc0;
+  --color-chalk-500: #6f7da4;
+
+  --color-star-400: #6ea8ff;
+  --color-star-500: #3b6ef5;
+  --color-star-600: #2b56cc;
+
+  --color-win-500: #2fbf71;
+  --color-lose-500: #e2564b;
+  --color-warn-500: #e2a33d;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #17224a 0%, transparent 60%),
+    var(--color-pitch-950);
+  color: var(--color-chalk-50);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Numeric columns line up only with tabular figures. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}

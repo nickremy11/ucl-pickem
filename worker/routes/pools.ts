@@ -1,0 +1,288 @@
+import { Hono } from "hono";
+import { eq, and, sql } from "drizzle-orm";
+import { z } from "zod";
+import { pools, poolMembers, users, auditLog } from "../db/schema";
+import { type AppEnv, requireAuth } from "../lib/app";
+import { hashPassword, verifyPassword } from "../lib/crypto";
+import { newInviteCode, slugify } from "../lib/id";
+import { consume, RATE_LIMITS } from "../lib/ratelimit";
+import { badRequest, conflict, forbidden, notFound } from "../lib/http";
+import { getActiveCompetition } from "../services/competition";
+import { PICK_MODES } from "../../shared/domain";
+
+export const poolRoutes = new Hono<AppEnv>();
+poolRoutes.use("*", requireAuth);
+
+const nameSchema = z.string().trim().min(3).max(48);
+const joinPasswordSchema = z.string().min(4).max(128);
+
+/** Member row + role, or null if the user is not in the pool. */
+async function membership(db: AppEnv["Variables"]["db"], poolId: string, userId: string) {
+  return (
+    (await db.query.poolMembers.findFirst({
+      where: and(eq(poolMembers.poolId, poolId), eq(poolMembers.userId, userId)),
+    })) ?? null
+  );
+}
+
+async function poolBySlug(db: AppEnv["Variables"]["db"], slug: string) {
+  const pool = await db.query.pools.findFirst({ where: eq(pools.slug, slug) });
+  if (!pool) notFound("That pool does not exist.");
+  return pool;
+}
+
+// ------------------------------------------------------------------ create
+
+poolRoutes.post("/", async (c) => {
+  const parsed = z
+    .object({
+      name: nameSchema,
+      joinPassword: joinPasswordSchema,
+      pickMode: z.enum(PICK_MODES),
+      joinClosesAt: z.coerce.date().optional(),
+    })
+    .safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    badRequest(parsed.error.issues[0]?.message ?? "Check the pool details and try again.");
+  }
+
+  const { name, joinPassword, pickMode, joinClosesAt } = parsed.data;
+  const db = c.get("db");
+  const userId = c.get("userId");
+
+  const competition = await getActiveCompetition(db, c.env);
+  if (!competition) {
+    badRequest("No competition has been loaded yet. Run the schedule sync first.");
+  }
+
+  // Pools close to new members at the first kickoff of the season, so everyone
+  // in a pool has picked every round. An explicit date can override this — the
+  // launch season needs that, since the app postdates its own first matchday.
+  const closesAt = joinClosesAt ?? competition.firstKickoffAt;
+  if (!closesAt) {
+    badRequest(
+      "The season has no fixtures yet, so there is no default join deadline. Pass joinClosesAt.",
+    );
+  }
+
+  try {
+    const [pool] = await db
+      .insert(pools)
+      .values({
+        slug: slugify(name),
+        name,
+        inviteCode: newInviteCode(),
+        joinPasswordHash: await hashPassword(joinPassword),
+        pickMode,
+        // A pool created after the season is underway has no business
+        // switching scoring rules, so it starts already frozen.
+        modeLocked: Boolean(
+          competition.firstKickoffAt && competition.firstKickoffAt.getTime() <= Date.now(),
+        ),
+        competitionId: competition.id,
+        ownerUserId: userId,
+        joinClosesAt: closesAt,
+      })
+      .returning();
+
+    await db.insert(poolMembers).values({ poolId: pool.id, userId, role: "owner" });
+
+    return c.json({ pool: publicPool(pool, "owner") }, 201);
+  } catch (err) {
+    if (String(err).includes("UNIQUE")) conflict("A pool with that name already exists.");
+    throw err;
+  }
+});
+
+// -------------------------------------------------------------------- join
+
+poolRoutes.post("/join", async (c) => {
+  const parsed = z
+    .object({
+      // Accepts a pool name, a slug, or an invite code — people paste all three.
+      identifier: z.string().trim().min(1).max(64),
+      joinPassword: z.string().max(128),
+    })
+    .safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) badRequest("Enter the pool name and password.");
+
+  const { identifier, joinPassword } = parsed.data;
+  const db = c.get("db");
+  const userId = c.get("userId");
+
+  await consume(c.env, "pool-join", userId, RATE_LIMITS.poolJoin);
+
+  const pool = await db.query.pools.findFirst({
+    where: sql`lower(${pools.name}) = lower(${identifier})
+            OR ${pools.slug} = ${identifier}
+            OR ${pools.inviteCode} = upper(${identifier})`,
+  });
+
+  // One message for "no such pool" and "wrong password" alike, so this endpoint
+  // cannot be used to discover which pool names exist.
+  const WRONG = "That pool name and password did not match.";
+  if (!pool) badRequest(WRONG);
+  if (!(await verifyPassword(joinPassword, pool.joinPasswordHash))) badRequest(WRONG);
+
+  const existing = await membership(db, pool.id, userId);
+  if (existing) return c.json({ pool: publicPool(pool, existing.role) });
+
+  if (pool.joinClosesAt.getTime() <= Date.now()) {
+    forbidden("This pool closed to new members when the season kicked off.");
+  }
+
+  await db.insert(poolMembers).values({ poolId: pool.id, userId, role: "member" });
+  return c.json({ pool: publicPool(pool, "member") }, 201);
+});
+
+// -------------------------------------------------------------------- read
+
+poolRoutes.get("/", async (c) => {
+  const db = c.get("db");
+  const rows = await db
+    .select({ pool: pools, role: poolMembers.role })
+    .from(poolMembers)
+    .innerJoin(pools, eq(pools.id, poolMembers.poolId))
+    .where(eq(poolMembers.userId, c.get("userId")));
+
+  return c.json({ pools: rows.map((r) => publicPool(r.pool, r.role)) });
+});
+
+poolRoutes.get("/:slug", async (c) => {
+  const db = c.get("db");
+  const pool = await poolBySlug(db, c.req.param("slug"));
+  const member = await membership(db, pool.id, c.get("userId"));
+  if (!member) forbidden("You are not a member of this pool.");
+
+  return c.json({ pool: publicPool(pool, member.role) });
+});
+
+poolRoutes.get("/:slug/members", async (c) => {
+  const db = c.get("db");
+  const pool = await poolBySlug(db, c.req.param("slug"));
+  const member = await membership(db, pool.id, c.get("userId"));
+  if (!member) forbidden("You are not a member of this pool.");
+
+  const rows = await db
+    .select({
+      userId: users.id,
+      username: users.username,
+      email: users.email,
+      displayName: poolMembers.displayName,
+      role: poolMembers.role,
+      joinedAt: poolMembers.joinedAt,
+    })
+    .from(poolMembers)
+    .innerJoin(users, eq(users.id, poolMembers.userId))
+    .where(eq(poolMembers.poolId, pool.id));
+
+  const isAdmin = member.role !== "member";
+  return c.json({
+    members: rows.map((r) => ({
+      userId: r.userId,
+      name: r.displayName ?? r.username ?? r.email.split("@")[0],
+      role: r.role,
+      joinedAt: r.joinedAt,
+      // Addresses are only exposed to pool admins, never to the whole pool.
+      email: isAdmin ? r.email : undefined,
+    })),
+  });
+});
+
+// ------------------------------------------------------------------- admin
+
+poolRoutes.patch("/:slug", async (c) => {
+  const db = c.get("db");
+  const pool = await poolBySlug(db, c.req.param("slug"));
+  const member = await membership(db, pool.id, c.get("userId"));
+  if (!member || member.role === "member") forbidden("Only pool admins can change settings.");
+
+  const parsed = z
+    .object({
+      name: nameSchema.optional(),
+      joinPassword: joinPasswordSchema.optional(),
+      pickMode: z.enum(PICK_MODES).optional(),
+      regenerateInvite: z.boolean().optional(),
+    })
+    .safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) badRequest("Check the settings and try again.");
+
+  const { name, joinPassword, pickMode, regenerateInvite } = parsed.data;
+  const update: Partial<typeof pools.$inferInsert> = {};
+
+  if (name !== undefined) update.name = name;
+  if (joinPassword !== undefined) update.joinPasswordHash = await hashPassword(joinPassword);
+  if (regenerateInvite) update.inviteCode = newInviteCode();
+
+  if (pickMode !== undefined && pickMode !== pool.pickMode) {
+    // Changing scoring rules mid-season would silently rewrite results that
+    // members have already seen, so the mode freezes when round 1 opens.
+    if (pool.modeLocked) {
+      conflict("The pick mode is locked because the season has started.");
+    }
+    update.pickMode = pickMode;
+  }
+
+  if (Object.keys(update).length === 0) return c.json({ pool: publicPool(pool, member.role) });
+
+  try {
+    const [updated] = await db
+      .update(pools)
+      .set(update)
+      .where(eq(pools.id, pool.id))
+      .returning();
+
+    await db.insert(auditLog).values({
+      actorUserId: c.get("userId"),
+      poolId: pool.id,
+      action: "pool.update",
+      target: pool.id,
+      before: { name: pool.name, pickMode: pool.pickMode },
+      after: { name: updated.name, pickMode: updated.pickMode },
+    });
+
+    return c.json({ pool: publicPool(updated, member.role) });
+  } catch (err) {
+    if (String(err).includes("UNIQUE")) conflict("A pool with that name already exists.");
+    throw err;
+  }
+});
+
+poolRoutes.delete("/:slug/members/:userId", async (c) => {
+  const db = c.get("db");
+  const pool = await poolBySlug(db, c.req.param("slug"));
+  const actor = await membership(db, pool.id, c.get("userId"));
+  if (!actor || actor.role === "member") forbidden("Only pool admins can remove members.");
+
+  const targetId = c.req.param("userId");
+  if (targetId === pool.ownerUserId) badRequest("The pool owner cannot be removed.");
+
+  await db
+    .delete(poolMembers)
+    .where(and(eq(poolMembers.poolId, pool.id), eq(poolMembers.userId, targetId)));
+
+  await db.insert(auditLog).values({
+    actorUserId: c.get("userId"),
+    poolId: pool.id,
+    action: "pool.member.remove",
+    target: targetId,
+  });
+
+  return c.json({ ok: true });
+});
+
+/** Never leaks the join password hash or internal ids. */
+function publicPool(pool: typeof pools.$inferSelect, role: string) {
+  return {
+    id: pool.id,
+    slug: pool.slug,
+    name: pool.name,
+    pickMode: pool.pickMode,
+    modeLocked: pool.modeLocked,
+    inviteCode: role === "member" ? undefined : pool.inviteCode,
+    joinClosesAt: pool.joinClosesAt,
+    joinOpen: pool.joinClosesAt.getTime() > Date.now(),
+    role,
+    createdAt: pool.createdAt,
+  };
+}
