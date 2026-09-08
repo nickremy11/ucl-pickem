@@ -127,5 +127,13 @@ sync do not drift when the US changes clocks.
   If they diverge, columns whose names are inferred from the property generate
   as camelCase but are queried as snake_case: the table exists, the column does
   not.
-- **Password hashing needs Workers Paid.** PBKDF2 at OWASP iteration counts
-  costs ~400ms CPU, over the Free plan's 10ms budget. Magic links do not.
+- **The Workers runtime caps PBKDF2 at 100,000 iterations** and throws
+  `NotSupportedError` above it — and the *local* runtime does not enforce that
+  cap. A higher work factor therefore passes every local test and fails only
+  once deployed. `worker/lib/crypto.test.ts` pins the constant, and
+  `GET /api/health?deep=1` exercises the KDF against the real runtime after a
+  deploy.
+- **Password hashing still wants Workers Paid.** Even at 100k iterations the
+  KDF exceeds the Free plan's 10ms CPU budget. Magic links do not.
+- **`Date.now()` does not advance during CPU work** on Workers — the clock
+  moves only on I/O. Timing pure computation with it always yields zero.

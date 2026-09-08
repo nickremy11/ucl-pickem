@@ -1,10 +1,19 @@
 /**
  * Password + token hashing on the Workers runtime (WebCrypto only).
  *
- * Iterations are set to OWASP's current recommendation for PBKDF2-HMAC-SHA256.
- * This costs ~400-500ms of CPU per verification, which is fine on Workers Paid
- * (30s budget, and password login is not a hot path since magic link is the
- * primary flow) but would blow the Free plan's 10ms budget.
+ * **The Workers runtime refuses PBKDF2 above 100,000 iterations**, throwing
+ * `NotSupportedError`. That is a hard platform ceiling, not a CPU budget, and
+ * it is NOT enforced by the local dev runtime — so a higher value passes every
+ * local test and then fails only once deployed. `crypto.test.ts` pins this so
+ * it cannot regress.
+ *
+ * OWASP currently recommends 600k for PBKDF2-HMAC-SHA256, which we cannot
+ * reach here. 100k is the platform maximum and remains a defensible work
+ * factor (it was OWASP's own guidance until recently). It matters less than it
+ * would elsewhere because passwords are optional — magic link is the primary
+ * flow — and the other use is pool join passwords, low-value secrets shared
+ * among friends. If a stronger KDF is ever needed, the answer is a memory-hard
+ * one (Argon2id/scrypt via WASM), not more PBKDF2 rounds.
  *
  * Magic links need none of this: link tokens are 160-bit random values, so a
  * single fast SHA-256 is the correct hash for them — there is nothing to
@@ -14,7 +23,10 @@
  * `verifyPassword` must sit behind the rate limiter in `ratelimit.ts`.
  */
 
-const PBKDF2_ITERATIONS = 600_000;
+/** Hard limit imposed by the Workers runtime. Exceeding it throws. */
+export const MAX_PBKDF2_ITERATIONS = 100_000;
+
+const PBKDF2_ITERATIONS = MAX_PBKDF2_ITERATIONS;
 const SCHEME = "pbkdf2-sha256";
 
 const enc = new TextEncoder();
@@ -63,7 +75,16 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const parts = stored.split("$");
   if (parts.length !== 4 || parts[0] !== SCHEME) return false;
   const iterations = Number(parts[1]);
-  if (!Number.isInteger(iterations) || iterations < 1000 || iterations > 1_000_000) return false;
+  // Reject anything the runtime cannot actually compute, rather than letting
+  // deriveBits throw NotSupportedError up through the request handler. A hash
+  // stored above the cap is unverifiable here by definition.
+  if (
+    !Number.isInteger(iterations) ||
+    iterations < 1000 ||
+    iterations > MAX_PBKDF2_ITERATIONS
+  ) {
+    return false;
+  }
   const bits = await deriveBits(password, fromB64(parts[2]), iterations);
   return timingSafeEqual(bits, fromB64(parts[3]));
 }
