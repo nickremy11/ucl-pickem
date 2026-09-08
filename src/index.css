@@ -1,29 +1,35 @@
 @import "tailwindcss";
 
 /*
- * Dark-first palette. The app is used mostly on a phone, at night, during
- * matches — so the default is the dark one and light is not offered.
+ * Dark-first palette drawn from European club-football night matches: deep
+ * indigo pitch, floodlit whites, an electric blue for action. The app is used
+ * mostly on a phone, at night, during matches — so dark is the only mode.
  */
 @theme {
-  --color-pitch-950: #070b18;
-  --color-pitch-900: #0c1226;
-  --color-pitch-850: #121a33;
-  --color-pitch-800: #182140;
-  --color-pitch-700: #223056;
-  --color-pitch-600: #33436e;
+  --color-pitch-950: #05070f;
+  --color-pitch-900: #0a0f22;
+  --color-pitch-850: #101733;
+  --color-pitch-800: #161f41;
+  --color-pitch-700: #223059;
+  --color-pitch-600: #334472;
 
-  --color-chalk-50: #f2f5ff;
-  --color-chalk-200: #c6cfe8;
-  --color-chalk-400: #8e9bc0;
-  --color-chalk-500: #6f7da4;
+  --color-chalk-50: #f4f7ff;
+  --color-chalk-200: #c9d3ee;
+  --color-chalk-400: #8e9cc6;
+  --color-chalk-500: #6b78a3;
 
+  --color-star-300: #a9c9ff;
   --color-star-400: #6ea8ff;
   --color-star-500: #3b6ef5;
   --color-star-600: #2b56cc;
+  --color-nebula-500: #7c4dff;
 
-  --color-win-500: #2fbf71;
-  --color-lose-500: #e2564b;
-  --color-warn-500: #e2a33d;
+  --color-win-500: #34d399;
+  --color-lose-500: #f0645a;
+  --color-warn-500: #f0b542;
+  --color-gold-400: #e9c46a;
+  --color-silver-400: #c3ccdd;
+  --color-bronze-400: #c98d5e;
 }
 
 html {
@@ -31,16 +37,56 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 50% -10%, #17224a 0%, transparent 60%),
-    var(--color-pitch-950);
+  background: var(--color-pitch-950);
   color: var(--color-chalk-50);
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-/* Numeric columns line up only with tabular figures. */
+/*
+ * Starfield + floodlight glow. Fixed so it does not scroll with content, and
+ * behind everything via a negative z-index on a non-positioned body.
+ */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1100px 520px at 50% -12%, rgba(59, 110, 245, 0.28) 0%, transparent 62%),
+    radial-gradient(760px 420px at 88% 8%, rgba(124, 77, 255, 0.16) 0%, transparent 60%),
+    radial-gradient(1.4px 1.4px at 12% 18%, rgba(255, 255, 255, 0.55) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 27% 62%, rgba(255, 255, 255, 0.38) 50%, transparent 51%),
+    radial-gradient(1.6px 1.6px at 44% 28%, rgba(255, 255, 255, 0.5) 50%, transparent 51%),
+    radial-gradient(1.1px 1.1px at 63% 74%, rgba(255, 255, 255, 0.34) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 79% 40%, rgba(255, 255, 255, 0.46) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 91% 66%, rgba(255, 255, 255, 0.34) 50%, transparent 51%),
+    radial-gradient(1.3px 1.3px at 8% 84%, rgba(255, 255, 255, 0.4) 50%, transparent 51%),
+    radial-gradient(1.1px 1.1px at 55% 92%, rgba(255, 255, 255, 0.3) 50%, transparent 51%);
+}
+
+/* Numeric columns only line up with tabular figures. */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* Hairline gradient rule used under section headings. */
+.rule {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgba(110, 168, 255, 0.5),
+    rgba(124, 77, 255, 0.22),
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { Card, Spinner, Empty } from "../components/ui";
 
 export function Standings() {
   const { slug = "" } = useParams();
+  const { user } = useAuth();
   const { data, isLoading, error } = useQuery({
     queryKey: ["standings", slug],
     queryFn: () => api.standings(slug),
@@ -32,7 +34,7 @@ export function Standings() {
       <Link to={`/p/${slug}`} className="text-sm text-chalk-400 hover:text-chalk-200">
         ‹ Back
       </Link>
-      <h1 className="mt-2 text-xl font-bold tracking-tight">Standings</h1>
+      <h1 className="mt-2 text-2xl font-black tracking-tight">Standings</h1>
       <p className="mt-0.5 text-xs text-chalk-500">{data.pool.name}</p>
 
       <div className="mt-5 -mx-5 overflow-x-auto px-5">
@@ -85,11 +87,29 @@ export function Standings() {
                       return possible > 0 ? `${made}/${possible}` : null;
                     })();
 
+                const isMe = row.userId === user?.id;
+                // Podium colours only mean anything on the running total.
+                const medal = !showing
+                  ? ["text-gold-400", "text-silver-400", "text-bronze-400"][i]
+                  : undefined;
+
                 return (
-                  <tr key={row.userId} className="border-b border-pitch-800/60 last:border-0">
-                    <td className="tnum px-4 py-3 text-chalk-500">{i + 1}</td>
-                    <td className="px-1 py-3 font-medium">{row.name}</td>
-                    <td className="tnum px-4 py-3 text-right font-semibold">{points}</td>
+                  <tr
+                    key={row.userId}
+                    className={`border-b border-pitch-800/60 last:border-0 ${
+                      isMe ? "bg-star-500/8" : ""
+                    }`}
+                  >
+                    <td className={`tnum px-4 py-3 font-bold ${medal ?? "text-chalk-500"}`}>
+                      {i + 1}
+                    </td>
+                    <td className="px-1 py-3 font-medium">
+                      {row.name}
+                      {isMe && (
+                        <span className="ml-1.5 text-[10px] font-bold text-star-400">YOU</span>
+                      )}
+                    </td>
+                    <td className="tnum px-4 py-3 text-right text-base font-black">{points}</td>
                     <td className="tnum px-4 py-3 text-right text-xs text-chalk-500">
                       {picks ?? "—"}
                     </td>
@@ -116,7 +136,9 @@ function Tab({ active, onClick, label }: { active: boolean; onClick: () => void;
       type="button"
       onClick={onClick}
       className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
-        active ? "bg-star-500 text-white" : "bg-pitch-800 text-chalk-400 hover:bg-pitch-700"
+        active
+          ? "bg-gradient-to-r from-star-500 to-nebula-500 text-white shadow-[0_0_16px_-4px] shadow-star-500/60"
+          : "bg-pitch-800 text-chalk-400 hover:bg-pitch-700"
       }`}
     >
       {label}

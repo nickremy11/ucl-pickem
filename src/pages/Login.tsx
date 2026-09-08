@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Button, Card, Field, Input, Alert } from "../components/ui";
+import { Wordmark } from "../components/brand";
 
 const LINK_ERRORS: Record<string, string> = {
   missing: "That link was incomplete. Request a new one.",
@@ -45,11 +46,12 @@ export function Login() {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-12">
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">UCL Pick&rsquo;em</h1>
-        <p className="mt-1.5 text-sm text-chalk-400">
+      <div className="mb-8 flex flex-col items-center text-center">
+        <Wordmark size="lg" />
+        <p className="mt-3 text-sm text-chalk-400">
           Champions League predictions, round by round.
         </p>
+        <div className="rule mt-6 w-40" />
       </div>
 
       <Card className="p-6">

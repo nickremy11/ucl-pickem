@@ -98,9 +98,12 @@ export function Round() {
       <div className="mt-5 space-y-6">
         {[...groups.entries()].map(([day, list]) => (
           <div key={day}>
-            <h2 className="mb-2.5 text-xs font-semibold tracking-wide text-chalk-400 uppercase">
-              {day}
-            </h2>
+            <div className="mb-2.5">
+              <h2 className="text-[11px] font-bold tracking-[0.14em] text-chalk-400 uppercase">
+                {day}
+              </h2>
+              <div className="rule mt-1.5" />
+            </div>
             <div className="space-y-2.5">
               {list.map((contest) => (
                 <ContestRow
@@ -124,7 +127,7 @@ function Header({ slug, data }: { slug: string; data: RoundDetail }) {
       <Link to={`/p/${slug}`} className="text-sm text-chalk-400 hover:text-chalk-200">
         ‹ Back
       </Link>
-      <h1 className="mt-2 text-xl font-bold tracking-tight">{data.round.name}</h1>
+      <h1 className="mt-2 text-2xl font-black tracking-tight">{data.round.name}</h1>
     </>
   );
 }
@@ -144,13 +147,25 @@ function ContestRow({
   const disabled = locked || awaitingLine || saving;
 
   return (
-    <Card className={`overflow-hidden ${locked ? "opacity-80" : ""}`}>
+    <Card
+      className={`relative overflow-hidden ${locked ? "opacity-85" : ""} ${
+        graded && myPick?.isCorrect
+          ? "border-win-500/40 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-win-500"
+          : ""
+      }`}
+    >
       <div className="flex items-center justify-between px-4 pt-3 text-[11px] text-chalk-500">
         <span>{kickoffLabel(contest.locksAt)}</span>
         {locked ? (
           graded ? (
-            <span className={myPick?.isCorrect ? "font-semibold text-win-500" : "text-chalk-500"}>
-              {myPick?.isCorrect ? `+${myPick.pointsAwarded}` : "0"} pt
+            <span
+              className={`rounded-md px-1.5 py-0.5 font-bold ${
+                myPick?.isCorrect
+                  ? "bg-win-500/15 text-win-500"
+                  : "bg-pitch-800 text-chalk-500"
+              }`}
+            >
+              {myPick?.isCorrect ? `+${myPick.pointsAwarded}` : "0"} PT
             </span>
           ) : (
             <span>Locked</span>
@@ -228,17 +243,21 @@ function SideButton({
       type="button"
       disabled={disabled}
       onClick={() => onPick(side)}
-      className={`flex min-h-16 items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors disabled:cursor-not-allowed ${
+      className={`flex min-h-[4.5rem] items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-all disabled:cursor-not-allowed ${
         alignRight ? "flex-row-reverse text-right" : "text-left"
       } ${
         active
-          ? "border-star-500 bg-star-500/15"
-          : "border-pitch-700 bg-pitch-950/40 enabled:hover:border-pitch-600"
+          ? "border-star-400 bg-gradient-to-br from-star-500/25 to-nebula-500/15 shadow-[0_0_20px_-4px] shadow-star-500/50"
+          : "border-pitch-700 bg-pitch-950/50 enabled:hover:border-star-500/40 enabled:hover:bg-pitch-850/60"
       }`}
     >
-      <Crest team={team} size={26} />
+      <Crest team={team} size={32} />
       <span className="min-w-0">
-        <span className={`block truncate text-sm font-semibold ${won ? "text-win-500" : ""}`}>
+        <span
+          className={`block truncate text-sm font-bold ${
+            won ? "text-win-500" : active ? "text-white" : "text-chalk-200"
+          }`}
+        >
           {team.shortName}
         </span>
         {point !== undefined && (
@@ -265,10 +284,10 @@ function DrawButton({
       type="button"
       disabled={disabled}
       onClick={() => onPick("DRAW")}
-      className={`min-h-16 rounded-xl border px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
+      className={`min-h-[4.5rem] rounded-xl border px-2.5 text-[11px] font-bold tracking-wide transition-all disabled:cursor-not-allowed ${
         active
-          ? "border-star-500 bg-star-500/15 text-chalk-50"
-          : "border-pitch-700 bg-pitch-950/40 text-chalk-400 enabled:hover:border-pitch-600"
+          ? "border-star-400 bg-gradient-to-br from-star-500/25 to-nebula-500/15 text-white shadow-[0_0_20px_-4px] shadow-star-500/50"
+          : "border-pitch-700 bg-pitch-950/50 text-chalk-400 enabled:hover:border-star-500/40"
       } ${outcome === "DRAW" ? "text-win-500" : ""}`}
     >
       DRAW

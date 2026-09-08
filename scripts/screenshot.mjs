@@ -11,10 +11,38 @@ const B = "http://localhost:5173";
 
 const browser = await chromium.launch({ channel: "chrome" });
 const page = await browser.newPage({ viewport: { width: 430, height: 932 }, deviceScaleFactor: 2 });
+// Wait for every <img> to finish decoding before capturing, otherwise a
+// full-page screenshot races the crest downloads and looks broken.
+const settleImages = async () => {
+  await page.evaluate(async () => {
+    const imgs = [...document.images];
+    await Promise.all(
+      imgs.map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise((res) => {
+              img.addEventListener("load", res, { once: true });
+              img.addEventListener("error", res, { once: true });
+            }),
+      ),
+    );
+  });
+};
+
 const shot = async (name) => {
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(400);
+  await settleImages();
+  await page.waitForTimeout(200);
+  const stats = await page.evaluate(() => {
+    const imgs = [...document.images];
+    return {
+      total: imgs.length,
+      loaded: imgs.filter((i) => i.complete && i.naturalWidth > 0).length,
+      failed: imgs.filter((i) => i.complete && i.naturalWidth === 0).length,
+    };
+  });
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
-  console.log("shot:", name);
+  console.log(`shot: ${name}  images ${stats.loaded}/${stats.total} loaded, ${stats.failed} failed`);
 };
 
 page.on("pageerror", (e) => console.log("PAGE ERROR:", e.message));

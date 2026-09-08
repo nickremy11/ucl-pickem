@@ -1,5 +1,13 @@
 # Champions League Pick-'em — Build Plan
 
+> **Status: shipped.** Live at https://ucl-pickem.ffhistorian.com — auth, pools,
+> ingestion, picks, scoring and standings are all working against live data.
+> See [README.md](README.md) for how it actually turned out; this document is
+> the original plan and is kept for the reasoning behind each decision.
+>
+> Still outstanding: odds/simple mode (§6 "Odds lock"), reminder and digest
+> emails, Turnstile, and the pool admin UI.
+
 ## 1. Product summary
 
 A web app where friends form private pools and predict Champions League results,
@@ -25,7 +33,7 @@ the team that advances.
 | Fixtures & results | football-data.org API (competition code `CL`), free tier |
 | Betting lines | The Odds API (`soccer_uefa_champs_league`, `spreads`) — league phase only |
 | Auth | Email magic link (primary) + optional password; optional username; no third-party IdP |
-| Email delivery | Resend to start, behind a thin interface so Cloudflare Email Sending can be swapped in |
+| Email delivery | Cloudflare Email Sending via the `send_email` Worker binding — no API key to manage. Sends from `onboarding@ffhistorian.com` |
 | Bot protection | Cloudflare Turnstile on signup / login / forgot-password |
 | Competition timezone | `America/New_York` — odds lock is Monday **8:00 AM ET**; times displayed in each user's local zone |
 | Knockout picks | **One pick per tie**, pick who advances. Same in both modes. Locks at first-leg kickoff |
@@ -350,8 +358,6 @@ matches kick off — everything below the line still works without the rest.
 8. Simple mode / odds (see caveat below).
 9. Reminder + digest emails, PWA, admin panel, hardening.
 
-**Odds caveat:** the Monday 8:00 AM ET lock for this week has already passed, so
-MD1 has no legitimate frozen line. Options: run round 1 as full-choice only and
-open simple mode from MD2, or snapshot tonight and accept that MD1's lines moved
-after some team news. Full-choice-only for MD1 is the cleaner call and it's what
-the build order above assumes.
+**Odds caveat:** the Monday 8:00 AM ET lock for MD1 had already passed by the
+time the app existed, so MD1 has no legitimate frozen line and runs
+full-choice. Simple mode can open from MD2, whose lock lands Monday 12 October.

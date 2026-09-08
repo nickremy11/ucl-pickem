@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./lib/auth";
 import { api } from "./lib/api";
 import { Spinner } from "./components/ui";
+import { Starfield, Wordmark } from "./components/brand";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Pool } from "./pages/Pool";
@@ -12,17 +13,29 @@ import { Standings } from "./pages/Standings";
 export function App() {
   const { user, loading } = useAuth();
 
-  if (loading) return <Spinner />;
+  if (loading) {
+    return (
+      <>
+        <Starfield />
+        <Spinner />
+      </>
+    );
+  }
+
   if (!user) {
     return (
-      <Routes>
-        <Route path="*" element={<Login />} />
-      </Routes>
+      <>
+        <Starfield />
+        <Routes>
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </>
     );
   }
 
   return (
     <>
+      <Starfield />
       <Nav />
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -46,10 +59,10 @@ function Nav() {
   }
 
   return (
-    <header className="border-b border-pitch-800/80 bg-pitch-950/60 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-pitch-800/70 bg-pitch-950/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-5 py-3">
-        <Link to="/" className="text-sm font-bold tracking-tight">
-          UCL Pick&rsquo;em
+        <Link to="/" className="transition-opacity hover:opacity-80">
+          <Wordmark />
         </Link>
         <div className="flex items-center gap-3">
           <span className="max-w-40 truncate text-xs text-chalk-500">
