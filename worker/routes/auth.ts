@@ -14,6 +14,7 @@ import { consume, RATE_LIMITS, clientIp } from "../lib/ratelimit";
 import { badRequest, conflict, unauthorized, GENERIC_AUTH_ERROR } from "../lib/http";
 import { sendEmail, magicLinkEmail, passwordResetEmail } from "../services/mail";
 import { safeRedirect } from "../lib/redirect";
+import { isUniqueViolation } from "../db/errors";
 import { MINUTE } from "../lib/time";
 
 const TOKEN_TTL_MS = 15 * MINUTE;
@@ -260,8 +261,11 @@ authRoutes.patch("/profile", requireAuth, async (c) => {
   try {
     await db.update(users).set(update).where(eq(users.id, userId));
   } catch (err) {
-    // The only unique constraint reachable here is the username index.
-    if (String(err).includes("UNIQUE")) conflict("That username is already taken.");
+    // The only unique constraint reachable here is the username index. Note
+    // it is on lower(username), so casing does not make a name available.
+    if (isUniqueViolation(err, "users_username_idx")) {
+      conflict("That username is already taken.");
+    }
     throw err;
   }
 

@@ -44,6 +44,14 @@ the invite is stored on the auth token so it survives the email round-trip even
 when the link is opened on a different device. Joining by pool name still
 requires the join password.
 
+**Identity**
+
+There is no profile page. Setting a username — the one thing worth setting —
+lives in the account menu in the nav, because burying it behind a route nobody
+visits means everyone stays listed by their email address. Usernames are unique
+case-insensitively, and are shown instead of the email in standings, member
+lists and picks.
+
 **Locking**
 
 - League contests lock at kickoff.
@@ -148,3 +156,8 @@ sync do not drift when the US changes clocks.
   KDF exceeds the Free plan's 10ms CPU budget. Magic links do not.
 - **`Date.now()` does not advance during CPU work** on Workers — the clock
   moves only on I/O. Timing pure computation with it always yields zero.
+- **Unique-constraint violations are not visible in `String(err)`.** Drizzle
+  wraps the driver error, and its own message is only the failed SQL; the
+  `UNIQUE constraint failed` text is further down the `cause` chain. Use
+  `isUniqueViolation` from `worker/db/errors.ts`, or a conflict silently
+  becomes a 500.

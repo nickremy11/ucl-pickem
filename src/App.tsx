@@ -1,9 +1,8 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./lib/auth";
-import { api } from "./lib/api";
 import { Spinner } from "./components/ui";
 import { Starfield, Wordmark } from "./components/brand";
+import { AccountMenu } from "./components/AccountMenu";
 import { Login } from "./pages/Login";
 import { Join } from "./pages/Join";
 import { Dashboard } from "./pages/Dashboard";
@@ -54,14 +53,7 @@ export function App() {
 }
 
 function Nav() {
-  const { user, refresh } = useAuth();
-  const qc = useQueryClient();
-
-  async function signOut() {
-    await api.logout();
-    qc.clear();
-    refresh();
-  }
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-20 border-b border-pitch-800/70 bg-pitch-950/80 backdrop-blur-md">
@@ -69,17 +61,7 @@ function Nav() {
         <Link to="/" className="transition-opacity hover:opacity-80">
           <Wordmark />
         </Link>
-        <div className="flex items-center gap-3">
-          <span className="max-w-40 truncate text-xs text-chalk-500">
-            {user?.username ?? user?.email}
-          </span>
-          <button
-            onClick={signOut}
-            className="text-xs text-chalk-400 underline-offset-4 hover:text-chalk-200 hover:underline"
-          >
-            Sign out
-          </button>
-        </div>
+        {user && <AccountMenu user={user} />}
       </div>
     </header>
   );

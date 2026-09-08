@@ -9,6 +9,7 @@ import { newInviteCode, slugify } from "../lib/id";
 import { consume, RATE_LIMITS } from "../lib/ratelimit";
 import { badRequest, conflict, forbidden, notFound } from "../lib/http";
 import { getActiveCompetition } from "../services/competition";
+import { isUniqueViolation } from "../db/errors";
 import { PICK_MODES } from "../../shared/domain";
 
 export const poolRoutes = new Hono<AppEnv>();
@@ -158,7 +159,9 @@ poolRoutes.post("/", async (c) => {
 
     return c.json({ pool: publicPool(pool, "owner") }, 201);
   } catch (err) {
-    if (String(err).includes("UNIQUE")) conflict("A pool with that name already exists.");
+    if (isUniqueViolation(err, "pools_name_idx")) {
+      conflict("A pool with that name already exists.");
+    }
     throw err;
   }
 });
@@ -312,7 +315,9 @@ poolRoutes.patch("/:slug", async (c) => {
 
     return c.json({ pool: publicPool(updated, member.role) });
   } catch (err) {
-    if (String(err).includes("UNIQUE")) conflict("A pool with that name already exists.");
+    if (isUniqueViolation(err, "pools_name_idx")) {
+      conflict("A pool with that name already exists.");
+    }
     throw err;
   }
 });
