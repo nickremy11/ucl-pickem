@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, type Contest, type RoundDetail, type Selection } from "../lib/api";
 import { Card, Spinner, Empty, Alert, Crest } from "../components/ui";
-import { kickoffLabel, dayLabel, countdown, signed } from "../lib/format";
+import { kickoffLabel, dayLabel, countdown, isUrgent, signed } from "../lib/format";
+import { useNow } from "../lib/useNow";
 
 export function Round() {
   const { slug = "", code = "" } = useParams();
@@ -75,18 +76,52 @@ export function Round() {
   }
 
   const picked = data.contests.filter((x) => x.myPick).length;
+  const total = data.contests.length;
+  const complete = picked === total;
+  // The soonest lock still ahead is the deadline that actually matters.
+  const nextLock = data.contests
+    .map((x) => x.locksAt)
+    .filter((iso) => new Date(iso).getTime() > Date.now())
+    .sort()[0];
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-8">
       <Header slug={slug} data={data} />
 
-      <div className="mt-4 flex items-center justify-between text-xs text-chalk-500">
-        <span>
-          {picked}/{data.contests.length} picked
-        </span>
-        <span>
-          {data.round.pointsPerPick} pt{data.round.pointsPerPick > 1 ? "s" : ""} per correct pick
-        </span>
+      <div className="mt-4 rounded-2xl border border-pitch-700/60 bg-pitch-900/70 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="tnum text-lg font-black">
+              {picked}
+              <span className="text-chalk-500">/{total}</span>
+              <span className="ml-1.5 text-xs font-semibold text-chalk-400">picked</span>
+            </p>
+            <p className="mt-0.5 text-[11px] text-chalk-500">
+              {data.round.pointsPerPick} pt{data.round.pointsPerPick > 1 ? "s" : ""} per correct
+              pick
+            </p>
+          </div>
+          {complete ? (
+            <span className="rounded-lg bg-win-500/15 px-2.5 py-1 text-xs font-bold text-win-500">
+              ✓ All in
+            </span>
+          ) : nextLock ? (
+            <div className="text-right">
+              <p className="text-[10px] font-bold tracking-[0.12em] text-chalk-500 uppercase">
+                First lock
+              </p>
+              <NextLock iso={nextLock} />
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-pitch-800">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              complete ? "bg-win-500" : "bg-gradient-to-r from-star-500 to-nebula-500"
+            }`}
+            style={{ width: `${total > 0 ? (picked / total) * 100 : 0}%` }}
+          />
+        </div>
       </div>
 
       {failed && (
@@ -121,6 +156,20 @@ export function Round() {
   );
 }
 
+function NextLock({ iso }: { iso: string }) {
+  const now = useNow();
+  const left = countdown(iso, now);
+  const urgent = isUrgent(iso, now);
+
+  return (
+    <p
+      className={`tnum text-sm font-bold ${urgent ? "animate-pulse text-lose-500" : "text-warn-500"}`}
+    >
+      {left ?? "Locked"}
+    </p>
+  );
+}
+
 function Header({ slug, data }: { slug: string; data: RoundDetail }) {
   return (
     <>
@@ -141,7 +190,12 @@ function ContestRow({
   saving: boolean;
   onPick: (s: Selection) => void;
 }) {
-  const { locked, myPick, line, awaitingLine } = contest;
+  const now = useNow();
+  const { myPick, line, awaitingLine } = contest;
+  // Derive from the ticking clock rather than the server's snapshot, so a card
+  // locks itself the moment kickoff passes without needing a refetch.
+  const locked = contest.locked || new Date(contest.locksAt).getTime() <= now;
+  const urgent = !locked && isUrgent(contest.locksAt, now);
   const selection = myPick?.selection;
   const graded = myPick?.pointsAwarded !== null && myPick?.pointsAwarded !== undefined;
   const disabled = locked || awaitingLine || saving;
@@ -171,7 +225,13 @@ function ContestRow({
             <span>Locked</span>
           )
         ) : (
-          <span className="text-warn-500">{countdown(contest.locksAt)} left</span>
+          <span
+            className={`tnum font-semibold ${
+              urgent ? "animate-pulse text-lose-500" : "text-warn-500"
+            }`}
+          >
+            {countdown(contest.locksAt, now)} left
+          </span>
         )}
       </div>
 

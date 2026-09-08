@@ -34,6 +34,16 @@ League matches are graded on the **90-minute** result. Knockout ties are graded
 on who advances — aggregate, then extra time, then penalties. There is no
 away-goals rule.
 
+**Joining**
+
+A pool's invite link (`/join/<code>`) is the main path in. Possession of the
+code is the credential — no join password — so it carries ~60 bits of entropy
+and an admin can regenerate it to revoke every outstanding link. Following a
+link without an account shows a public preview of the pool, then signs you in;
+the invite is stored on the auth token so it survives the email round-trip even
+when the link is opened on a different device. Joining by pool name still
+requires the join password.
+
 **Locking**
 
 - League contests lock at kickoff.
@@ -112,6 +122,7 @@ including before any account exists.
 | `POST /api/admin/score` | Settle contests, grade picks, rebuild standings |
 | `POST /api/admin/refresh-rounds` | Recompute round timing and status |
 | `GET /api/admin/status` | Season snapshot |
+| `GET /api/health?deep=1` | Health check that also exercises the password KDF |
 
 Two cron triggers run in production: a five-minute tick (lock states, result
 polling during match windows) and an hourly job that acts only when the wall

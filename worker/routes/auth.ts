@@ -13,6 +13,7 @@ import {
 import { consume, RATE_LIMITS, clientIp } from "../lib/ratelimit";
 import { badRequest, conflict, unauthorized, GENERIC_AUTH_ERROR } from "../lib/http";
 import { sendEmail, magicLinkEmail, passwordResetEmail } from "../services/mail";
+import { safeRedirect } from "../lib/redirect";
 import { MINUTE } from "../lib/time";
 
 const TOKEN_TTL_MS = 15 * MINUTE;
@@ -36,6 +37,7 @@ async function issueToken(
   userId: string,
   kind: "magic_link" | "password_reset",
   ip: string,
+  redirectTo: string | null = null,
 ) {
   const token = newSecretToken();
   await db.insert(authTokens).values({
@@ -44,6 +46,7 @@ async function issueToken(
     tokenHash: await hashToken(token),
     expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
     requestIp: ip,
+    redirectTo,
   });
   return token;
 }
@@ -52,9 +55,15 @@ async function issueToken(
 
 authRoutes.post("/magic-link", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const parsed = z.object({ email: emailSchema }).safeParse(body);
+  const parsed = z
+    .object({ email: emailSchema, next: z.string().optional() })
+    .safeParse(body);
   if (!parsed.success) badRequest("Enter a valid email address.");
   const { email } = parsed.data;
+
+  // Anything that fails validation is dropped rather than rejected: a bad
+  // `next` should not stop someone signing in.
+  const redirectTo = safeRedirect(parsed.data.next);
 
   const ip = clientIp(c.req.raw);
   await consume(c.env, "magic-ip", ip, RATE_LIMITS.magicLinkPerIp);
@@ -72,7 +81,7 @@ authRoutes.post("/magic-link", async (c) => {
     user = created;
   }
 
-  const token = await issueToken(db, user.id, "magic_link", ip);
+  const token = await issueToken(db, user.id, "magic_link", ip, redirectTo);
   const url = `${c.env.APP_URL}/api/auth/callback?token=${encodeURIComponent(token)}`;
 
   await sendEmail(c.env, { to: email, ...magicLinkEmail(url, isNew) });
@@ -106,7 +115,10 @@ authRoutes.get("/callback", async (c) => {
     .where(eq(users.id, row.userId));
 
   await createSession(c, row.userId);
-  return c.redirect("/", 302);
+  // Re-validate on the way out: the column is only ever written through
+  // safeRedirect, but this is the point where the value becomes a Location
+  // header, so it is the point worth being certain.
+  return c.redirect(safeRedirect(row.redirectTo) ?? "/", 302);
 });
 
 // --------------------------------------------------------------- password

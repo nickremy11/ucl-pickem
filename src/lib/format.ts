@@ -19,19 +19,32 @@ export function dayLabel(iso: string, tz?: string): string {
   }).format(new Date(iso));
 }
 
-/** Compact "locks in 3h 12m" copy. Returns null once the moment has passed. */
+/**
+ * Compact "3h 12m" copy. Returns null once the moment has passed.
+ *
+ * Resolution tightens as the deadline nears — days out, nobody cares about
+ * minutes; inside the last hour, seconds are the whole point.
+ */
 export function countdown(iso: string, now = Date.now()): string | null {
   const ms = new Date(iso).getTime() - now;
   if (ms <= 0) return null;
 
-  const mins = Math.floor(ms / 60000);
-  const days = Math.floor(mins / 1440);
-  const hours = Math.floor((mins % 1440) / 60);
-  const minutes = mins % 60;
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  return `${seconds}s`;
+}
+
+/** True inside the last hour, when a deadline deserves visual urgency. */
+export function isUrgent(iso: string, now = Date.now()): boolean {
+  const ms = new Date(iso).getTime() - now;
+  return ms > 0 && ms < 60 * 60 * 1000;
 }
 
 /** Handicaps read as +1.5 / -1.5, never as "1.5". */

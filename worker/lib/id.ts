@@ -9,9 +9,16 @@ export function newId(length = 21): string {
   return out;
 }
 
-/** Short, human-readable, unambiguous code for pool invites. */
+/**
+ * Pool invite code.
+ *
+ * Possession of this is what authorises joining through an invite link, so it
+ * is sized as a credential, not a convenience: 12 characters of a 33-symbol
+ * alphabet is about 60 bits. Still short enough to read aloud, and a pool admin
+ * can regenerate it to revoke every outstanding link.
+ */
 export function newInviteCode(): string {
-  return newId(8).toUpperCase();
+  return newId(12).toUpperCase();
 }
 
 /** Slug from a pool name, with a random suffix so names can collide freely. */

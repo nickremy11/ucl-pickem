@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, type PickMode } from "../lib/api";
 import { Button, Card, Field, Input, Alert, Spinner, Empty } from "../components/ui";
+import { StarMark } from "../components/brand";
 import { kickoffLabel } from "../lib/format";
 
 export function Dashboard() {
@@ -17,7 +18,7 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-8">
-      <h1 className="text-xl font-bold tracking-tight">Your pools</h1>
+      <h1 className="text-2xl font-black tracking-tight">Your pools</h1>
 
       {isLoading ? (
         <Spinner />
@@ -25,26 +26,23 @@ export function Dashboard() {
         <div className="mt-5 space-y-3">
           {data.pools.map((p) => (
             <Link key={p.id} to={`/p/${p.slug}`} className="block">
-              <Card className="p-4 transition-colors hover:border-star-500/50">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{p.name}</p>
+              <Card className="overflow-hidden transition-all hover:border-star-500/50 hover:bg-pitch-850/60 active:scale-[0.99]">
+                <div className="flex items-center gap-3.5 p-4">
+                  <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-star-500/25 to-nebula-500/20">
+                    <StarMark size={22} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold">{p.name}</p>
                     <p className="mt-0.5 text-xs text-chalk-500">
                       {p.pickMode === "full" ? "Full choice" : "Against the spread"}
                       {p.role !== "member" && ` · ${p.role}`}
                     </p>
                   </div>
-                  <span className="text-chalk-500">›</span>
+                  <span className="shrink-0 text-lg text-chalk-500">›</span>
                 </div>
                 {p.joinOpen && (
-                  <p className="mt-3 border-t border-pitch-800 pt-3 text-xs text-chalk-500">
-                    Closes to new members {kickoffLabel(p.joinClosesAt)}
-                    {p.inviteCode && (
-                      <>
-                        {" · code "}
-                        <span className="font-mono text-chalk-200">{p.inviteCode}</span>
-                      </>
-                    )}
+                  <p className="border-t border-pitch-800 px-4 py-2.5 text-[11px] text-chalk-500">
+                    Open to new members until {kickoffLabel(p.joinClosesAt)}
                   </p>
                 )}
               </Card>

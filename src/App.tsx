@@ -5,6 +5,7 @@ import { api } from "./lib/api";
 import { Spinner } from "./components/ui";
 import { Starfield, Wordmark } from "./components/brand";
 import { Login } from "./pages/Login";
+import { Join } from "./pages/Join";
 import { Dashboard } from "./pages/Dashboard";
 import { Pool } from "./pages/Pool";
 import { Round } from "./pages/Round";
@@ -27,6 +28,9 @@ export function App() {
       <>
         <Starfield />
         <Routes>
+          {/* An invite must be reachable without an account — that is the
+              whole point of the link. */}
+          <Route path="/join/:code" element={<Join />} />
           <Route path="*" element={<Login />} />
         </Routes>
       </>
@@ -42,6 +46,7 @@ export function App() {
         <Route path="/p/:slug" element={<Pool />} />
         <Route path="/p/:slug/r/:code" element={<Round />} />
         <Route path="/p/:slug/standings" element={<Standings />} />
+        <Route path="/join/:code" element={<Join />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

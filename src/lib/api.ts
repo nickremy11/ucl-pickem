@@ -116,6 +116,17 @@ export interface StandingsRow {
   >;
 }
 
+export interface Invite {
+  name: string;
+  pickMode: PickMode;
+  memberCount: number;
+  joinClosesAt: string;
+  joinOpen: boolean;
+  signedIn: boolean;
+  alreadyMember: boolean;
+  slug?: string;
+}
+
 export interface Standings {
   pool: { slug: string; name: string; pickMode: PickMode };
   rounds: { code: string; name: string; kind: string; pointsPerPick: number; status: string }[];
@@ -126,13 +137,17 @@ export interface Standings {
 
 export const api = {
   me: () => req<{ user: User | null }>("/api/auth/me"),
-  magicLink: (email: string) => post<{ ok: true }>("/api/auth/magic-link", { email }),
+  magicLink: (email: string, next?: string) =>
+    post<{ ok: true }>("/api/auth/magic-link", { email, next }),
   passwordLogin: (email: string, password: string) =>
     post<{ ok: true }>("/api/auth/password/login", { email, password }),
   forgot: (email: string) => post<{ ok: true }>("/api/auth/password/forgot", { email }),
   logout: () => post<{ ok: true }>("/api/auth/logout"),
   updateProfile: (patch: Partial<{ username: string; timezone: string; password: string }>) =>
     req<{ ok: true }>("/api/auth/profile", { method: "PATCH", body: JSON.stringify(patch) }),
+
+  invite: (code: string) => req<{ invite: Invite }>(`/api/pools/invite/${code}`),
+  acceptInvite: (code: string) => post<{ pool: Pool }>(`/api/pools/invite/${code}/join`),
 
   pools: () => req<{ pools: Pool[] }>("/api/pools"),
   createPool: (input: { name: string; joinPassword: string; pickMode: PickMode }) =>

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, type RoundSummary } from "../lib/api";
 import { Card, Spinner, Empty } from "../components/ui";
 import { StarMark } from "../components/brand";
+import { InviteLink } from "../components/InviteLink";
 import { kickoffLabel, countdown } from "../lib/format";
 
 export function Pool() {
@@ -25,12 +26,6 @@ export function Pool() {
           <h1 className="truncate text-2xl font-black tracking-tight">{p.name}</h1>
           <p className="mt-1 text-xs text-chalk-500">
             {p.pickMode === "full" ? "Full choice" : "Against the spread"}
-            {p.inviteCode && (
-              <>
-                {" · code "}
-                <span className="font-mono text-star-300">{p.inviteCode}</span>
-              </>
-            )}
           </p>
         </div>
         <Link
@@ -40,6 +35,12 @@ export function Pool() {
           Standings
         </Link>
       </div>
+
+      {p.inviteCode && p.joinOpen && (
+        <div className="mt-5">
+          <InviteLink code={p.inviteCode} poolName={p.name} />
+        </div>
+      )}
 
       <Section title="League phase" />
       <div className="space-y-2.5">

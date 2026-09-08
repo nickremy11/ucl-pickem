@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactNode, ButtonHTMLAttributes, InputHTMLAttributes } from "react";
+import { StarMark } from "./brand";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
@@ -121,9 +122,12 @@ export function Spinner() {
 
 export function Empty({ title, body }: { title: string; body?: string }) {
   return (
-    <Card className="p-8 text-center">
-      <p className="font-semibold text-chalk-200">{title}</p>
-      {body && <p className="mt-1.5 text-sm text-chalk-500">{body}</p>}
+    <Card className="px-8 py-10 text-center">
+      <div className="mx-auto mb-4 w-fit opacity-40">
+        <StarMark size={36} />
+      </div>
+      <p className="font-bold text-chalk-200">{title}</p>
+      {body && <p className="mx-auto mt-1.5 max-w-xs text-sm text-chalk-500">{body}</p>}
     </Card>
   );
 }

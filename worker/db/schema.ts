@@ -59,6 +59,12 @@ export const authTokens = sqliteTable(
     expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
     consumedAt: integer("consumed_at", { mode: "timestamp" }),
     requestIp: text("request_ip"),
+    /**
+     * Same-origin path to land on after the link is consumed. Stored on the
+     * token rather than in a cookie so an invite survives the usual pattern of
+     * requesting the link on one device and opening it on another.
+     */
+    redirectTo: text("redirect_to"),
     createdAt: now(),
   },
   (t) => [

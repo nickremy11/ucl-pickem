@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Card, Spinner, Empty } from "../components/ui";
+import { Avatar } from "../components/Avatar";
 
 export function Standings() {
   const { slug = "" } = useParams();
@@ -103,11 +104,18 @@ export function Standings() {
                     <td className={`tnum px-4 py-3 font-bold ${medal ?? "text-chalk-500"}`}>
                       {i + 1}
                     </td>
-                    <td className="px-1 py-3 font-medium">
-                      {row.name}
-                      {isMe && (
-                        <span className="ml-1.5 text-[10px] font-bold text-star-400">YOU</span>
-                      )}
+                    <td className="px-1 py-3">
+                      <span className="flex items-center gap-2.5">
+                        <Avatar userId={row.userId} name={row.name} size={30} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold">{row.name}</span>
+                          {isMe && (
+                            <span className="text-[10px] font-bold tracking-wide text-star-400">
+                              YOU
+                            </span>
+                          )}
+                        </span>
+                      </span>
                     </td>
                     <td className="tnum px-4 py-3 text-right text-base font-black">{points}</td>
                     <td className="tnum px-4 py-3 text-right text-xs text-chalk-500">
