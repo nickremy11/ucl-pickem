@@ -1,6 +1,6 @@
 # Champions League Pick-'em — Build Plan
 
-> **Status: shipped.** Live at https://ucl-pickem.ffhistorian.com — auth, pools,
+> **Status: shipped.** Live at https://ucl.bruisedbanana.dev — auth, pools,
 > ingestion, picks, scoring and standings are all working against live data.
 > See [README.md](README.md) for how it actually turned out; this document is
 > the original plan and is kept for the reasoning behind each decision.

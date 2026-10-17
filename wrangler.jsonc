@@ -9,9 +9,15 @@
     "enabled": true
   },
 
-  // Custom domain on the ffhistorian.com zone. `custom_domain` makes Cloudflare
-  // create and manage the DNS record and certificate for this hostname.
+  // Custom domains. `custom_domain` makes Cloudflare create and manage the DNS
+  // record and certificate for each hostname. ucl.bruisedbanana.dev is the
+  // canonical origin; the old ffhistorian.com hostname stays attached so
+  // existing bookmarks, invite links and already-sent emails keep working.
   "routes": [
+    {
+      "pattern": "ucl.bruisedbanana.dev",
+      "custom_domain": true
+    },
     {
       "pattern": "ucl-pickem.ffhistorian.com",
       "custom_domain": true
@@ -60,7 +66,7 @@
     "COMPETITION_TZ": "America/New_York",
     // Magic links are built from this, so it must be the deployed origin.
     // .dev.vars overrides it with localhost for local development.
-    "APP_URL": "https://ucl-pickem.ffhistorian.com",
+    "APP_URL": "https://ucl.bruisedbanana.dev",
     "MAIL_FROM_EMAIL": "onboarding@ffhistorian.com",
     "MAIL_FROM_NAME": "UCL Pick'em",
     // "console" prints magic links to the terminal instead of sending them.

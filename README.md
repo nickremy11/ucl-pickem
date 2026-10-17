@@ -4,7 +4,7 @@ A private Champions League prediction pool. Friends join a pool, pick every
 fixture round by round, and the app scores it automatically from a live results
 feed.
 
-Live at **https://ucl-pickem.ffhistorian.com**
+Live at **https://ucl.bruisedbanana.dev**
 
 ## How it works
 
