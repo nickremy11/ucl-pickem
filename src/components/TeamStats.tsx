@@ -8,23 +8,43 @@ const FORM_STYLE: Record<FormEntry["result"], string> = {
   L: "bg-lose-500/20 text-lose-500",
 };
 
-function formTitle(f: FormEntry): string {
-  const verdict = { W: "Win", D: "Draw", L: "Loss" }[f.result];
-  return `${verdict} ${f.score} ${f.home ? "vs" : "at"} ${f.opponent} (${f.competition}, ${f.date})`;
+function verdict(f: FormEntry): string {
+  return { W: "Win", D: "Draw", L: "Loss" }[f.result];
 }
 
-export function FormDots({ form }: { form: FormEntry[] }) {
+/**
+ * Each result is a focusable button with its own popover rather than a `title`
+ * attribute: native tooltips lag by a second, never appear on touch screens,
+ * and cannot be styled. Hover shows it on desktop; tapping focuses the chip,
+ * which shows it on a phone. `align` keeps the popover inside the card, whose
+ * edges clip anything that overflows.
+ */
+export function FormDots({ form, align = "left" }: { form: FormEntry[]; align?: "left" | "right" }) {
   if (form.length === 0) return <Dash />;
   return (
     <span className="inline-flex gap-0.5" aria-label={`Last ${form.length}: ${form.map((f) => f.result).join(" ")}`}>
       {form.map((f, i) => (
-        <span
+        <button
           key={i}
-          title={formTitle(f)}
-          className={`grid size-[18px] place-items-center rounded text-[10px] font-black ${FORM_STYLE[f.result]}`}
+          type="button"
+          aria-label={`${verdict(f)} ${f.score} ${f.home ? "vs" : "at"} ${f.opponent}`}
+          className={`group relative grid size-[18px] cursor-default place-items-center rounded text-[10px] font-black outline-none focus-visible:ring-1 focus-visible:ring-star-400 ${FORM_STYLE[f.result]}`}
         >
           {f.result}
-        </span>
+          <span
+            role="tooltip"
+            className={`pointer-events-none absolute bottom-full z-20 mb-1.5 hidden w-max max-w-[11rem] rounded-lg border border-pitch-600 bg-pitch-850 px-2.5 py-1.5 text-left text-[11px] leading-snug font-semibold text-chalk-50 shadow-lg group-hover:block group-focus:block ${
+              align === "right" ? "right-0" : "left-0"
+            }`}
+          >
+            <span className="block">
+              {verdict(f)} {f.score} {f.home ? "vs" : "at"} {f.opponent}
+            </span>
+            <span className="block text-[10px] font-medium text-chalk-400">
+              {f.competition} · {f.date}
+            </span>
+          </span>
+        </button>
       ))}
     </span>
   );
@@ -48,7 +68,7 @@ function Flag({ ctx }: { ctx: TeamContext }) {
 }
 
 /** One side's value for each row, ready to drop into the comparison grid. */
-function cells(ctx: TeamContext | null | undefined): ReactNode[] {
+function cells(ctx: TeamContext | null | undefined, align: "left" | "right"): ReactNode[] {
   if (!ctx) return [<Dash />, <Dash />, <Dash />, <Dash />];
 
   const league = ctx.league;
@@ -81,7 +101,7 @@ function cells(ctx: TeamContext | null | undefined): ReactNode[] {
     ) : (
       <Dash />
     ),
-    <FormDots form={ctx.form} />,
+    <FormDots form={ctx.form} align={align} />,
   ];
 }
 
@@ -95,18 +115,18 @@ const LABELS = ["Country", "League", "UCL", "Form"];
 export function TeamStats({ sideA, sideB }: { sideA: TeamRef; sideB: TeamRef }) {
   if (!sideA.context && !sideB.context) return null;
 
-  const a = cells(sideA.context);
-  const b = cells(sideB.context);
+  const a = cells(sideA.context, "left");
+  const b = cells(sideB.context, "right");
 
   return (
     <dl className="grid grid-cols-[1fr_3.5rem_1fr] items-center gap-x-2 gap-y-1.5 border-t border-pitch-800 px-4 py-2.5 text-[11px] text-chalk-200">
       {LABELS.map((label, i) => (
         <div key={label} className="contents">
-          <dd className="min-w-0 truncate">{a[i]}</dd>
+          <dd className="min-w-0">{a[i]}</dd>
           <dt className="text-center text-[9px] font-bold tracking-[0.12em] text-chalk-500 uppercase">
             {label}
           </dt>
-          <dd className="flex min-w-0 justify-end truncate text-right">{b[i]}</dd>
+          <dd className="flex min-w-0 justify-end text-right">{b[i]}</dd>
         </div>
       ))}
     </dl>
