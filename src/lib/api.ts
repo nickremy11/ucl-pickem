@@ -111,9 +111,20 @@ export interface RevealedPick {
   selection: Selection;
 }
 
+export interface ContestVenue {
+  /** 1 or 2 for a two-legged tie, null for a single match. */
+  leg: 1 | 2 | null;
+  host: "SIDE_A" | "SIDE_B";
+  stadium: string;
+  city: string;
+  country: string | null;
+}
+
 export interface Contest {
   id: string;
   kind: "fixture" | "tie";
+  /** Empty when the ground is unknown or neutral (e.g. the final). */
+  venues: ContestVenue[];
   sideA: TeamRef;
   sideB: TeamRef;
   locksAt: string;

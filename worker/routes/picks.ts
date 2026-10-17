@@ -10,6 +10,7 @@ import {
   users,
   poolMembers,
   oddsSnapshots,
+  ties,
 } from "../db/schema";
 import { type AppEnv, requireAuth } from "../lib/app";
 import { requireMembership } from "../lib/pool";
@@ -17,6 +18,7 @@ import { badRequest, forbidden, notFound, conflict } from "../lib/http";
 import { SELECTIONS, allowedSelections, ROUND_CODES } from "../../shared/domain";
 import { refreshLiveScores, roundHasLiveFixture } from "../services/ingest";
 import { getContextFor } from "../services/teamContext";
+import { contestVenues, groundFor } from "../services/venues";
 
 export const pickRoutes = new Hono<AppEnv>();
 pickRoutes.use("*", requireAuth);
@@ -122,6 +124,10 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
     fixturesByTie.set(f.tieId, [...(fixturesByTie.get(f.tieId) ?? []), f]);
   }
 
+  const tieRows = await db.query.ties.findMany({ where: eq(ties.roundId, round.id) });
+  const tieById = new Map(tieRows.map((t) => [t.id, t]));
+  const providerIdByTeam = new Map(teamRows.map((t) => [t.id, t.providerTeamId]));
+
   const contestIds = contestRows.map((x) => x.id);
   const myPicks = await db.query.picks.findMany({
     where: and(
@@ -204,9 +210,23 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
         fixture = legs.find((f) => f.status === "live") ?? legs.filter((f) => f.status === "finished").pop() ?? legs[0];
       }
 
+      const legFixtures = x.tieId
+        ? (fixturesByTie.get(x.tieId) ?? [])
+        : fixture
+          ? [fixture]
+          : [];
+
       return {
         id: x.id,
         kind: x.kind,
+        venues: contestVenues({
+          sideATeamId: x.sideATeamId,
+          sideBTeamId: x.sideBTeamId,
+          singleLeg: x.tieId ? (tieById.get(x.tieId)?.singleLeg ?? false) : false,
+          legs: legFixtures,
+          groundOf: (id) => groundFor(providerIdByTeam.get(id)),
+          countryOf: (id) => contextById.get(id)?.country ?? null,
+        }),
         sideA: team(teamById.get(x.sideATeamId), contextById),
         sideB: team(teamById.get(x.sideBTeamId), contextById),
         locksAt: x.locksAt,

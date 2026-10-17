@@ -204,6 +204,34 @@ export function Round() {
   );
 }
 
+function VenueLine({
+  venues,
+  sideA,
+  sideB,
+}: {
+  venues: Contest["venues"];
+  sideA: Contest["sideA"];
+  sideB: Contest["sideB"];
+}) {
+  if (venues.length === 0) return null;
+
+  return (
+    <div className="space-y-0.5 px-4 pt-1.5 text-[11px] text-chalk-400">
+      {venues.map((v) => {
+        const host = v.host === "SIDE_A" ? sideA : sideB;
+        return (
+          <p key={v.leg ?? 0} className="truncate">
+            {v.leg && <span className="font-semibold text-chalk-500">Leg {v.leg} · </span>}
+            {v.leg && <span className="text-chalk-200">{host.shortName} · </span>}
+            {v.stadium}, {v.city}
+            {v.country ? `, ${v.country}` : ""}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function NextLock({ iso }: { iso: string }) {
   const now = useNow();
   const left = countdown(iso, now);
@@ -253,6 +281,9 @@ function ContestRow({
   const selection = myPick?.selection;
   const graded = myPick?.pointsAwarded !== null && myPick?.pointsAwarded !== undefined;
   const disabled = locked || awaitingLine || saving;
+  // A single match has one host. A two-legged tie has two, so neither side is
+  // "the home team" and the venue lines carry that instead.
+  const homeSide = contest.venues.length === 1 ? contest.venues[0].host : null;
 
   return (
     <Card
@@ -292,14 +323,17 @@ function ContestRow({
         )}
       </div>
 
+      <VenueLine venues={contest.venues} sideA={contest.sideA} sideB={contest.sideB} />
+
       {contest.kind === "tie" && (
         <p className="px-4 pt-1.5 text-[11px] text-star-400">Pick who advances</p>
       )}
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-3">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-4 py-3">
         <SideButton
           contest={contest}
           side="SIDE_A"
+          home={homeSide === "SIDE_A"}
           active={selection === "SIDE_A"}
           disabled={disabled}
           onPick={onPick}
@@ -320,6 +354,7 @@ function ContestRow({
         <SideButton
           contest={contest}
           side="SIDE_B"
+          home={homeSide === "SIDE_B"}
           active={selection === "SIDE_B"}
           disabled={disabled}
           onPick={onPick}
@@ -343,6 +378,7 @@ function ContestRow({
 function SideButton({
   contest,
   side,
+  home,
   active,
   disabled,
   onPick,
@@ -350,6 +386,7 @@ function SideButton({
 }: {
   contest: Contest;
   side: "SIDE_A" | "SIDE_B";
+  home: boolean;
   active: boolean;
   disabled: boolean;
   onPick: (s: Selection) => void;
@@ -364,7 +401,7 @@ function SideButton({
       type="button"
       disabled={disabled}
       onClick={() => onPick(side)}
-      className={`flex min-h-[4.5rem] items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-all disabled:cursor-not-allowed ${
+      className={`flex min-h-[4.5rem] min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 transition-all disabled:cursor-not-allowed ${
         alignRight ? "flex-row-reverse text-right" : "text-left"
       } ${
         active
@@ -372,8 +409,13 @@ function SideButton({
           : "border-pitch-700 bg-pitch-950/50 enabled:hover:border-star-500/40 enabled:hover:bg-pitch-850/60"
       }`}
     >
-      <Crest team={team} size={32} />
+      <Crest team={team} size={28} />
       <span className="min-w-0">
+        {home && (
+          <span className="block text-[9px] leading-none font-bold tracking-[0.14em] text-star-400 uppercase">
+            Home
+          </span>
+        )}
         <span
           className={`block truncate text-sm font-bold ${
             won ? "text-win-500" : active ? "text-white" : "text-chalk-200"
@@ -405,7 +447,7 @@ function DrawButton({
       type="button"
       disabled={disabled}
       onClick={() => onPick("DRAW")}
-      className={`min-h-[4.5rem] rounded-xl border px-2.5 text-[11px] font-bold tracking-wide transition-all disabled:cursor-not-allowed ${
+      className={`min-h-[4.5rem] rounded-xl border px-2 text-[11px] font-bold tracking-wide transition-all disabled:cursor-not-allowed ${
         active
           ? "border-star-400 bg-gradient-to-br from-star-500/25 to-nebula-500/15 text-white shadow-[0_0_20px_-4px] shadow-star-500/50"
           : "border-pitch-700 bg-pitch-950/50 text-chalk-400 enabled:hover:border-star-500/40"
