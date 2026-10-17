@@ -16,6 +16,7 @@ import { requireMembership } from "../lib/pool";
 import { badRequest, forbidden, notFound, conflict } from "../lib/http";
 import { SELECTIONS, allowedSelections, ROUND_CODES } from "../../shared/domain";
 import { refreshLiveScores, roundHasLiveFixture } from "../services/ingest";
+import { getContextFor } from "../services/teamContext";
 
 export const pickRoutes = new Hono<AppEnv>();
 pickRoutes.use("*", requireAuth);
@@ -107,6 +108,7 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
   ];
   const teamRows = await db.query.teams.findMany({ where: inArray(teams.id, teamIds) });
   const teamById = new Map(teamRows.map((t) => [t.id, t]));
+  const contextById = await getContextFor(db, teamIds);
 
   // Scores come from the underlying fixtures. A tie contest spans two legs, so
   // show whichever leg is live, else the most recent one played.
@@ -205,8 +207,8 @@ pickRoutes.get("/:slug/rounds/:code", async (c) => {
       return {
         id: x.id,
         kind: x.kind,
-        sideA: team(teamById.get(x.sideATeamId)),
-        sideB: team(teamById.get(x.sideBTeamId)),
+        sideA: team(teamById.get(x.sideATeamId), contextById),
+        sideB: team(teamById.get(x.sideBTeamId), contextById),
         locksAt: x.locksAt,
         locked,
         status: x.status,
@@ -355,8 +357,38 @@ function roundSummary(round: typeof rounds.$inferSelect, pickMode: string) {
   };
 }
 
-function team(t: typeof teams.$inferSelect | undefined) {
-  return t
-    ? { id: t.id, name: t.name, shortName: t.shortName, crestUrl: t.crestUrl }
-    : { id: "", name: "TBD", shortName: "TBD", crestUrl: null };
+function team(
+  t: typeof teams.$inferSelect | undefined,
+  contexts: Awaited<ReturnType<typeof getContextFor>>,
+) {
+  if (!t) return { id: "", name: "TBD", shortName: "TBD", crestUrl: null, context: null };
+  const c = contexts.get(t.id);
+  return {
+    id: t.id,
+    name: t.name,
+    shortName: t.shortName,
+    crestUrl: t.crestUrl,
+    context: c
+      ? {
+          country: c.country,
+          flagUrl: c.flagUrl,
+          league:
+            c.leagueCode && c.leaguePosition !== null
+              ? {
+                  code: c.leagueCode,
+                  name: c.leagueName,
+                  position: c.leaguePosition,
+                  played: c.leaguePlayed,
+                  points: c.leaguePoints,
+                }
+              : null,
+          ucl:
+            c.uclPosition !== null
+              ? { position: c.uclPosition, played: c.uclPlayed, points: c.uclPoints }
+              : null,
+          form: c.form ?? [],
+          refreshedAt: c.refreshedAt,
+        }
+      : null,
+  };
 }

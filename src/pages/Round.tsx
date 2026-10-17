@@ -5,9 +5,32 @@ import { api, ApiError, type Contest, type RoundDetail, type Selection } from ".
 import { Card, Spinner, Empty, Alert, Crest } from "../components/ui";
 import { MatchScore } from "../components/MatchScore";
 import { RevealedPicks } from "../components/RevealedPicks";
+import { TeamStats } from "../components/TeamStats";
 import { useAuth } from "../lib/auth";
 import { kickoffLabel, dayLabel, countdown, isUrgent, signed } from "../lib/format";
 import { useNow } from "../lib/useNow";
+
+const STATS_KEY = "ucl-pickem:team-stats";
+
+/** Remembered per device; storage can be blocked, so fail open to "shown". */
+function useStatsPreference(): [boolean, (v: boolean) => void] {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem(STATS_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const set = (v: boolean) => {
+    setShow(v);
+    try {
+      localStorage.setItem(STATS_KEY, v ? "on" : "off");
+    } catch {
+      /* preference just will not persist */
+    }
+  };
+  return [show, set];
+}
 
 export function Round() {
   const { slug = "", code = "" } = useParams();
@@ -27,6 +50,7 @@ export function Round() {
   });
 
   const [failed, setFailed] = useState<string | null>(null);
+  const [showStats, setShowStats] = useStatsPreference();
 
   const save = useMutation({
     mutationFn: (v: { contestId: string; selection: Selection }) =>
@@ -134,6 +158,17 @@ export function Round() {
         </div>
       </div>
 
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowStats(!showStats)}
+          aria-pressed={showStats}
+          className="rounded-lg border border-pitch-700 px-2.5 py-1 text-[11px] font-semibold text-chalk-400 hover:text-chalk-200"
+        >
+          Team stats: {showStats ? "on" : "off"}
+        </button>
+      </div>
+
       {failed && (
         <div className="mt-4">
           <Alert>{failed}</Alert>
@@ -156,6 +191,7 @@ export function Round() {
                   contest={contest}
                   memberCount={data.memberCount}
                   meId={user?.id}
+                  showStats={showStats}
                   saving={save.isPending && save.variables?.contestId === contest.id}
                   onPick={(selection) => save.mutate({ contestId: contest.id, selection })}
                 />
@@ -197,12 +233,14 @@ function ContestRow({
   contest,
   memberCount,
   meId,
+  showStats,
   saving,
   onPick,
 }: {
   contest: Contest;
   memberCount: number;
   meId?: string;
+  showStats: boolean;
   saving: boolean;
   onPick: (s: Selection) => void;
 }) {
@@ -288,6 +326,8 @@ function ContestRow({
           point={line?.sideB}
         />
       </div>
+
+      {showStats && <TeamStats sideA={contest.sideA} sideB={contest.sideB} />}
 
       {awaitingLine && (
         <p className="border-t border-pitch-800 px-4 py-2 text-[11px] text-chalk-500">

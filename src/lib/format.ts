@@ -51,3 +51,10 @@ export function isUrgent(iso: string, now = Date.now()): boolean {
 export function signed(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
+
+/** 1 -> "1st", 12 -> "12th", 23 -> "23rd". */
+export function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
+}

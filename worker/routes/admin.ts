@@ -6,6 +6,7 @@ import { timingSafeEqual } from "../lib/crypto";
 import { syncFromProvider, refreshRoundTiming } from "../services/ingest";
 import { getActiveCompetition } from "../services/competition";
 import { settleAndScore } from "../services/scoring";
+import { refreshTeamContext } from "../services/teamContext";
 import { refreshContestLocks } from "../services/jobs";
 import { rounds, contests } from "../db/schema";
 
@@ -32,6 +33,15 @@ adminRoutes.use("*", async (c, next) => {
 /** Pull teams, fixtures, ties and contests from football-data.org. */
 adminRoutes.post("/sync", async (c) => {
   const report = await syncFromProvider(c.get("db"), c.env);
+  return c.json(report);
+});
+
+/**
+ * Refresh country, standings and form. Takes ~2 minutes because requests are
+ * paced to the provider's rate limit; the daily cron runs the same code.
+ */
+adminRoutes.post("/team-context", async (c) => {
+  const report = await refreshTeamContext(c.get("db"), c.env);
   return c.json(report);
 });
 

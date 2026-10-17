@@ -96,6 +96,46 @@ export const teams = sqliteTable(
   (t) => [uniqueIndex("teams_provider_idx").on(t.providerTeamId)],
 );
 
+/**
+ * Display-only context about a team: where it is from, how it is doing at home
+ * and in the competition, and its recent results. Kept apart from `teams` so
+ * the schedule sync (which owns that table) can never clobber it, and so a
+ * failed refresh leaves the previous values in place.
+ *
+ * Nothing here feeds scoring.
+ */
+export const teamContext = sqliteTable("team_context", {
+  teamId: text("team_id")
+    .primaryKey()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  country: text("country"),
+  flagUrl: text("flag_url"),
+  /** Domestic league, e.g. "PL". Null when the provider plan does not cover it. */
+  leagueCode: text("league_code"),
+  leagueName: text("league_name"),
+  leaguePosition: integer("league_position"),
+  leaguePlayed: integer("league_played"),
+  leaguePoints: integer("league_points"),
+  /** Position in the Champions League league-phase table. */
+  uclPosition: integer("ucl_position"),
+  uclPlayed: integer("ucl_played"),
+  uclPoints: integer("ucl_points"),
+  /** Last five results across every competition we can see, oldest first. */
+  form: text("form", { mode: "json" }).$type<FormEntry[]>(),
+  refreshedAt: integer("refreshed_at", { mode: "timestamp" }),
+});
+
+export interface FormEntry {
+  result: "W" | "D" | "L";
+  /** Opponent short name. */
+  opponent: string;
+  home: boolean;
+  /** This team's goals first, e.g. "2-1". */
+  score: string;
+  competition: string;
+  date: string;
+}
+
 export const rounds = sqliteTable(
   "rounds",
   {

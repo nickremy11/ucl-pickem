@@ -47,6 +47,24 @@ export interface FdMatch {
   };
 }
 
+export interface FdArea {
+  name: string;
+  code: string;
+  flag: string | null;
+}
+
+export interface FdCompetitionTeam extends FdTeam {
+  area: FdArea;
+  runningCompetitions?: { code: string; name: string; type: string }[];
+}
+
+export interface FdStandingRow {
+  position: number;
+  team: FdTeam;
+  playedGames: number;
+  points: number;
+}
+
 async function get<T>(env: Env, path: string, ttlSec = CACHE_TTL_SEC): Promise<T> {
   if (!env.FOOTBALL_DATA_TOKEN) {
     throw new Error(
@@ -54,9 +72,14 @@ async function get<T>(env: Env, path: string, ttlSec = CACHE_TTL_SEC): Promise<T
     );
   }
 
+  // ttlSec 0 bypasses the cache. The team-context refresh makes ~17 requests in
+  // one invocation; KV reads and writes count as subrequests too, so caching
+  // them would triple the cost against Workers' per-invocation ceiling.
   const cacheKey = `fd:${ttlSec}:${path}`;
-  const cached = await env.SESSIONS.get(cacheKey);
-  if (cached) return JSON.parse(cached) as T;
+  if (ttlSec > 0) {
+    const cached = await env.SESSIONS.get(cacheKey);
+    if (cached) return JSON.parse(cached) as T;
+  }
 
   const res = await fetch(`${BASE}${path}`, {
     headers: { "X-Auth-Token": env.FOOTBALL_DATA_TOKEN },
@@ -70,7 +93,9 @@ async function get<T>(env: Env, path: string, ttlSec = CACHE_TTL_SEC): Promise<T
   }
 
   const body = (await res.json()) as T;
-  await env.SESSIONS.put(cacheKey, JSON.stringify(body), { expirationTtl: ttlSec });
+  if (ttlSec > 0) {
+    await env.SESSIONS.put(cacheKey, JSON.stringify(body), { expirationTtl: ttlSec });
+  }
   return body;
 }
 
@@ -135,4 +160,36 @@ export function mapStatus(match: FdMatch): "scheduled" | "live" | "finished" | "
     default:
       return "scheduled";
   }
+}
+
+// ---- team context ----------------------------------------------------------
+// Uncached on purpose (see `get`); callers pace themselves.
+
+export async function fetchCompetitionTeams(env: Env): Promise<FdCompetitionTeam[]> {
+  const body = await get<{ teams: FdCompetitionTeam[] }>(
+    env,
+    `/competitions/${env.COMPETITION_CODE}/teams`,
+    0,
+  );
+  return body.teams ?? [];
+}
+
+/** The first (overall) table of a competition's standings. */
+export async function fetchStandings(env: Env, code: string): Promise<FdStandingRow[]> {
+  const body = await get<{ standings: { type: string; table: FdStandingRow[] }[] }>(
+    env,
+    `/competitions/${code}/standings`,
+    0,
+  );
+  const total = body.standings?.find((s) => s.type === "TOTAL") ?? body.standings?.[0];
+  return total?.table ?? [];
+}
+
+export async function fetchFinishedMatches(env: Env, code: string): Promise<FdMatch[]> {
+  const body = await get<{ matches: FdMatch[] }>(
+    env,
+    `/competitions/${code}/matches?status=FINISHED`,
+    0,
+  );
+  return body.matches ?? [];
 }

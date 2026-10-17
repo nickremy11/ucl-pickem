@@ -4,6 +4,7 @@ import { contests, fixtures } from "../db/schema";
 import { getActiveCompetition } from "./competition";
 import { syncFromProvider, refreshRoundTiming } from "./ingest";
 import { settleAndScore } from "./scoring";
+import { refreshTeamContext } from "./teamContext";
 import { isWeekdayHour, isHour, MONDAY, HOUR } from "../lib/time";
 
 /**
@@ -55,6 +56,9 @@ async function runHourly(db: Db, env: Env) {
       await settleAndScore(db, competition.id);
       await refreshRoundTiming(db, competition.id);
     }
+    // After the sync so brand-new teams (e.g. a knockout draw) already exist.
+    // Slow by design (rate-limit pacing), so it goes last.
+    await refreshTeamContext(db, env);
   }
 
   // Monday 08:00 in the competition timezone — the betting-line freeze for the

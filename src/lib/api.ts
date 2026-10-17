@@ -63,11 +63,38 @@ export interface RoundSummary {
   pickedCount: number;
 }
 
+export interface FormEntry {
+  result: "W" | "D" | "L";
+  opponent: string;
+  home: boolean;
+  score: string;
+  competition: string;
+  date: string;
+}
+
+export interface TeamContext {
+  country: string | null;
+  flagUrl: string | null;
+  /** Null when the data provider does not cover this team's domestic league. */
+  league: {
+    code: string;
+    name: string | null;
+    position: number;
+    played: number | null;
+    points: number | null;
+  } | null;
+  ucl: { position: number; played: number | null; points: number | null } | null;
+  /** Oldest first, up to five. */
+  form: FormEntry[];
+  refreshedAt: string | null;
+}
+
 export interface TeamRef {
   id: string;
   name: string;
   shortName: string;
   crestUrl: string | null;
+  context?: TeamContext | null;
 }
 
 export interface MatchState {
